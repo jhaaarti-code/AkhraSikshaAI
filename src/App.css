@@ -2976,3 +2976,147 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   Unverified Safeguard Notice Card Styling
+   ========================================================================== */
+.unverified-safeguard-card {
+  background: #FFFDF9;
+  border: 1.5px solid #FDBA74;
+  border-radius: var(--radius-lg);
+  padding: 1.35rem 1.45rem;
+  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+}
+
+.safeguard-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.safeguard-badge {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FCD34D;
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 0.2rem 0.65rem;
+  border-radius: var(--radius-full);
+}
+
+.demo-mode-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-light);
+  background: var(--bg-elevated);
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.unverified-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.warning-symbol {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.unverified-card-header h4 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #9A3412;
+  margin-bottom: 0.2rem;
+}
+
+.unverified-input-echo {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.unverified-input-echo strong {
+  color: var(--text-main);
+}
+
+.safeguard-description {
+  font-size: 0.86rem;
+  color: #7C2D12;
+  line-height: 1.55;
+  background: #FFF7ED;
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.95rem;
+  border: 1px solid #FFEDD5;
+}
+
+.primer-recommendations-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.rec-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.rec-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.btn-rec-chip {
+  background: #FFFFFF;
+  border: 1.5px solid #FDBA74;
+  border-radius: var(--radius-full);
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #C2410C;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-rec-chip:hover {
+  background: #FFEDD5;
+  transform: translateY(-1px);
+}
+
+.btn-rec-chip.student-rec-chip {
+  border-color: #86EFAC;
+  color: #047857;
+}
+
+.btn-rec-chip.student-rec-chip:hover {
+  background: #DCFCE7;
+}
+
+.safeguard-api-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--border-medium);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.safeguard-api-footer .btn-link {
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}

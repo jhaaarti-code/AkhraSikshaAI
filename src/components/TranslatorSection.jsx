@@ -450,7 +450,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                   <span>Santhali Classroom Translation (संथाली अनुवाद):</span>
                 </div>
 
-                {teacherTranslation && (
+                {teacherTranslation && teacherTranslation.isVerified && (
                   <button
                     type="button"
                     className={`btn-audio-playback ${isTeacherSpeaking ? 'audio-active' : ''}`}
@@ -469,52 +469,91 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                   <span>Translating Hindi to verified Santhali Ol Chiki...</span>
                 </div>
               ) : teacherTranslation ? (
-                <div className="translation-display-card animate-fade-in">
-                  {/* Verified or Demo Badge */}
-                  <div className="result-badge-row">
-                    <span className={`badge-pill ${teacherTranslation.isVerified ? 'badge-verified' : 'badge-demo'}`}>
-                      {teacherTranslation.isVerified ? '✓ Verified Primer Match' : '⚠️ Demo Sandbox Mode'}
-                    </span>
-                    <span className="badge-script">Ol Chiki Script</span>
-                  </div>
-
-                  {/* Primary Ol Chiki Text Display */}
-                  <div className="ol-chiki-screen">
-                    {teacherTranslation.santhaliOlChiki}
-                  </div>
-
-                  {/* Phonetic Pronunciation Guide */}
-                  <div className="phonetics-dual-row">
-                    <div className="phonetic-col">
-                      <span className="phonetic-tag">Roman / English Pronunciation:</span>
-                      <p className="phonetic-val">{teacherTranslation.santhaliRoman}</p>
+                teacherTranslation.isVerified ? (
+                  <div className="translation-display-card animate-fade-in">
+                    {/* Verified Badge */}
+                    <div className="result-badge-row">
+                      <span className="badge-pill badge-verified">
+                        ✓ Verified Primer Match
+                      </span>
+                      <span className="badge-script">Ol Chiki Script</span>
                     </div>
-                    <div className="phonetic-col">
-                      <span className="phonetic-tag">देवनागरी उच्चारण (Hindi phonetic):</span>
-                      <p className="phonetic-val">{teacherTranslation.santhaliDevanagari}</p>
+
+                    {/* Primary Ol Chiki Text Display */}
+                    <div className="ol-chiki-screen">
+                      {teacherTranslation.santhaliOlChiki}
+                    </div>
+
+                    {/* Phonetic Pronunciation Guide */}
+                    <div className="phonetics-dual-row">
+                      <div className="phonetic-col">
+                        <span className="phonetic-tag">Roman / English Pronunciation:</span>
+                        <p className="phonetic-val">{teacherTranslation.santhaliRoman}</p>
+                      </div>
+                      <div className="phonetic-col">
+                        <span className="phonetic-tag">देवनागरी उच्चारण (Hindi phonetic):</span>
+                        <p className="phonetic-val">{teacherTranslation.santhaliDevanagari}</p>
+                      </div>
+                    </div>
+
+                    {/* English Meaning & Teacher Context */}
+                    <div className="meaning-strip">
+                      <strong>English Meaning:</strong> <span>{teacherTranslation.english}</span>
+                    </div>
+
+                    <div className="pedagogy-tip-strip">
+                      <span className="tip-star">💡</span>
+                      <span>{teacherTranslation.teacherTip}</span>
                     </div>
                   </div>
+                ) : (
+                  <div className="unverified-safeguard-card animate-fade-in">
+                    <div className="safeguard-badge-row">
+                      <span className="safeguard-badge">🛡️ सटीकता सुरक्षा (Accuracy Policy)</span>
+                      <span className="demo-mode-tag">Curated Primer Lookup</span>
+                    </div>
+                    
+                    <div className="unverified-card-header">
+                      <span className="warning-symbol">⚠️</span>
+                      <div>
+                        <h4>वाक्य प्राथमिक प्राइमर में उपलब्ध नहीं है (Not in Verified Lexicon)</h4>
+                        <p className="unverified-input-echo">
+                          आपने दर्ज किया: <strong>"{teacherHindiText}"</strong>
+                        </p>
+                      </div>
+                    </div>
 
-                  {/* English Meaning & Teacher Context */}
-                  <div className="meaning-strip">
-                    <strong>English Meaning:</strong> <span>{teacherTranslation.english}</span>
-                  </div>
+                    <p className="safeguard-description">
+                      {teacherTranslation.explanation}
+                    </p>
 
-                  <div className="pedagogy-tip-strip">
-                    <span className="tip-star">💡</span>
-                    <span>{teacherTranslation.teacherTip}</span>
-                  </div>
+                    <div className="primer-recommendations-section">
+                      <span className="rec-title">सत्यापित प्राथमिक वाक्य चुनें (Try a Verified Classroom Sentence):</span>
+                      <div className="rec-chips-wrap">
+                        {SAMPLE_PROMPTS.slice(0, 6).map((p, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            className="btn-rec-chip"
+                            onClick={() => {
+                              setTeacherHindiText(p.text);
+                              handleTranslateTeacher(p.text);
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-                  {/* Unverified Custom Input Warning */}
-                  {teacherTranslation.isDemoSimulation && (
-                    <div className="demo-integrity-box">
-                      <p>{teacherTranslation.demoNotice}</p>
+                    <div className="safeguard-api-footer">
+                      <span>किसी भी मनचाहे वाक्य का AI अनुवाद करने के लिए:</span>
                       <button type="button" className="btn-link" onClick={onOpenApiGuide}>
                         Connect Bhashini / IndicTrans2 API ➔
                       </button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )
               ) : (
                 <div className="empty-box-state">
                   <span>Speak or enter a Hindi sentence above to see the Santhali translation here.</span>
@@ -650,7 +689,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                   <span>Hindi Translation for Teacher (शिक्षक के लिए हिंदी अनुवाद):</span>
                 </div>
 
-                {studentTranslation && (
+                {studentTranslation && studentTranslation.isVerified && (
                   <button
                     type="button"
                     className={`btn-audio-playback hindi-audio-btn ${isStudentSpeaking ? 'audio-active' : ''}`}
@@ -669,52 +708,91 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                   <span>Translating student Santhali to standard Hindi...</span>
                 </div>
               ) : studentTranslation ? (
-                <div className="translation-display-card student-result-card animate-fade-in">
-                  {/* Verified Badge */}
-                  <div className="result-badge-row">
-                    <span className={`badge-pill ${studentTranslation.isVerified ? 'badge-verified' : 'badge-demo'}`}>
-                      {studentTranslation.isVerified ? '✓ Verified Student Expression' : '⚠️ Demo Sandbox Mode'}
-                    </span>
-                    <span className="badge-script">Hindi (हिंदी)</span>
-                  </div>
-
-                  {/* Primary Hindi Translation Text Display */}
-                  <div className="hindi-screen-highlight">
-                    {studentTranslation.hindiTranslation}
-                  </div>
-
-                  {/* Santhali Original Representation */}
-                  <div className="phonetics-dual-row">
-                    <div className="phonetic-col">
-                      <span className="phonetic-tag">Ol Chiki Script (ᱚᱞ ᱪᱤᱠᱤ):</span>
-                      <p className="phonetic-val ol-chiki-val">{studentTranslation.santhaliOlChiki}</p>
+                studentTranslation.isVerified ? (
+                  <div className="translation-display-card student-result-card animate-fade-in">
+                    {/* Verified Badge */}
+                    <div className="result-badge-row">
+                      <span className="badge-pill badge-verified">
+                        ✓ Verified Student Expression
+                      </span>
+                      <span className="badge-script">Hindi (हिंदी)</span>
                     </div>
-                    <div className="phonetic-col">
-                      <span className="phonetic-tag">Roman / Phonetic:</span>
-                      <p className="phonetic-val">{studentTranslation.santhaliRoman}</p>
+
+                    {/* Primary Hindi Translation Text Display */}
+                    <div className="hindi-screen-highlight">
+                      {studentTranslation.hindiTranslation}
+                    </div>
+
+                    {/* Santhali Original Representation */}
+                    <div className="phonetics-dual-row">
+                      <div className="phonetic-col">
+                        <span className="phonetic-tag">Ol Chiki Script (ᱚᱞ ᱪᱤᱠᱤ):</span>
+                        <p className="phonetic-val ol-chiki-val">{studentTranslation.santhaliOlChiki}</p>
+                      </div>
+                      <div className="phonetic-col">
+                        <span className="phonetic-tag">Roman / Phonetic:</span>
+                        <p className="phonetic-val">{studentTranslation.santhaliRoman}</p>
+                      </div>
+                    </div>
+
+                    {/* English Meaning & Teacher Context */}
+                    <div className="meaning-strip">
+                      <strong>English Meaning:</strong> <span>{studentTranslation.englishMeaning}</span>
+                    </div>
+
+                    <div className="pedagogy-tip-strip student-advice-strip">
+                      <span className="tip-star">🤝</span>
+                      <span><strong>Teacher Advice:</strong> {studentTranslation.teacherAdvice}</span>
                     </div>
                   </div>
+                ) : (
+                  <div className="unverified-safeguard-card animate-fade-in">
+                    <div className="safeguard-badge-row">
+                      <span className="safeguard-badge">🛡️ सटीकता सुरक्षा (Accuracy Policy)</span>
+                      <span className="demo-mode-tag">Curated Primer Lookup</span>
+                    </div>
 
-                  {/* English Meaning & Teacher Context */}
-                  <div className="meaning-strip">
-                    <strong>English Meaning:</strong> <span>{studentTranslation.englishMeaning}</span>
-                  </div>
+                    <div className="unverified-card-header">
+                      <span className="warning-symbol">⚠️</span>
+                      <div>
+                        <h4>संथाली वाक्य प्राथमिक प्राइमर में उपलब्ध नहीं है (Not in Verified Lexicon)</h4>
+                        <p className="unverified-input-echo">
+                          आपने दर्ज किया: <strong>"{studentSanthaliText}"</strong>
+                        </p>
+                      </div>
+                    </div>
 
-                  <div className="pedagogy-tip-strip student-advice-strip">
-                    <span className="tip-star">🤝</span>
-                    <span><strong>Teacher Advice:</strong> {studentTranslation.teacherAdvice}</span>
-                  </div>
+                    <p className="safeguard-description">
+                      सटीकता सुरक्षा: मनगढ़ंत या गलत अनुवाद प्रदर्शित करने से बचने के लिए, हमने कोई असंबंधित हिंदी अनुवाद नहीं दिखाया है। यह प्रोटोटाइप प्राथमिक कक्षा प्राइमर के सत्यापित संथाली वाक्यों पर आधारित है।
+                    </p>
 
-                  {/* Unverified Notice */}
-                  {studentTranslation.isDemoSimulation && (
-                    <div className="demo-integrity-box">
-                      <p>{studentTranslation.demoNotice}</p>
+                    <div className="primer-recommendations-section">
+                      <span className="rec-title">सत्यापित छात्र अभिव्यक्तियों में से चुनें (Try a Verified Student Expression):</span>
+                      <div className="rec-chips-wrap">
+                        {STUDENT_SAMPLE_PROMPTS.slice(0, 6).map((p, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            className="btn-rec-chip student-rec-chip"
+                            onClick={() => {
+                              setStudentSanthaliText(p.text);
+                              handleTranslateStudent(p.text);
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="safeguard-api-footer">
+                      <span>किसी भी संथाली वाक्य का संपूर्ण AI अनुवाद करने के लिए:</span>
                       <button type="button" className="btn-link" onClick={onOpenApiGuide}>
                         Connect Bhashini / IndicTrans2 API ➔
                       </button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )
               ) : (
                 <div className="empty-box-state">
                   <span>Speak or enter a student Santhali phrase above to see the Hindi translation here.</span>
