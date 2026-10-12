@@ -66,10 +66,10 @@ export default function App() {
         {/* Core Teacher's Classroom Translator */}
         <section className="section-container" aria-label="Teacher Translation Tool">
           <div className="section-header-compact">
-            <div className="section-badge-pill">कक्षा अनुवादक • Classroom Tool</div>
-            <h2 className="section-title">Classroom Hindi-to-Tribal Translator</h2>
+            <div className="section-badge-pill">🎙️ द्वि-मार्गी कक्षा संवाद • Two-Way Speech Translator</div>
+            <h2 className="section-title">Two-Way Classroom Speech & Text Translator</h2>
             <p className="section-subtitle">
-              Select or type a classroom sentence to generate verified Ol Chiki script, phonetic guides, and audio.
+              Live microphone speech recognition and translation: Teacher speaks Hindi ➔ Santhali translation, Student speaks Santhali ➔ Hindi translation. All spoken and translated text remains visible on screen.
             </p>
           </div>
 

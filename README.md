@@ -25,14 +25,13 @@ In Santhal and Chotanagpur tribal tradition, the **Akhra (ᱟᱠᱷᱲᱟ)** is 
 
 ## 🚀 Key Features
 
-| Feature | Description |
-| :--- | :--- |
-| **Classroom Hindi Translator** | Input any classroom sentence or pick from one-click teacher prompt chips. |
+| **Two-Way Speech Recognition** | Real-time microphone listening for both Teacher (Hindi) and Student (Santhali) with animated listening indicator. |
+| **Simultaneous Display** | Both spoken text and translated text remain visible at the same time in separate, clearly labeled text boxes. |
+| **Editable Recognized Text** | Teachers and students can edit or type text directly before or after translation. |
+| **Bidirectional Audio Playback** | One-click audio playback buttons for both Santhali translation and Hindi translation. |
 | **Triple-Script Output** | Displays authentic Ol Chiki (ᱚᱞ ᱪᱤᱠᱤ), Latin phonetics, and Devanagari phonetics. |
-| **Speech Audio (TTS)** | Native Web Speech synthesis with phonetic fallback when Santhali OS voices are not installed. |
-| **Pedagogical Tips** | Cultural notes and classroom advice for teachers to build trust with students. |
-| **Student Flashcards** | Bilingual flip cards with emojis and pronunciations for everyday objects and numbers. |
-| **Akhra Star Quiz** | 5-question interactive quiz with stars, cheerful feedback, and explanations. |
+| **Pedagogical Tips & Advice** | Cultural context notes and teacher advice on how to respond to tribal student needs. |
+| **Student Flashcards & Quiz** | Interactive bilingual flip cards with audio and 5-question star quiz challenge. |
 | **Zero-Hallucination Integrity** | Uncurated custom text is honestly marked as Demo Mode rather than inventing fake translations. |
 | **API Integration Blueprint** | Complete documentation and code sample to connect Bhashini or AI4Bharat IndicTrans2. |
 

@@ -150,3 +150,109 @@ export const SAMPLE_PROMPTS = [
   { label: '🤫 शांति से सुनो', text: 'शांति से सुनो और ध्यान दो' },
   { label: '💧 पानी पी लो', text: 'जाओ और थोड़ा पानी पी लो' }
 ];
+
+/**
+ * Curated Student Santhali Spoken Expressions
+ * Typical phrases spoken by primary school tribal students to their teachers.
+ */
+export const CURATED_STUDENT_SANTHALI_PHRASES = [
+  {
+    id: 'stu-1',
+    category: 'Student Greeting',
+    santhaliOlChiki: 'ᱡᱚᱦᱟᱨ ᱢᱟᱪᱮᱛ',
+    santhaliRoman: 'Johar machet',
+    santhaliDevanagari: 'जोहार माचेत',
+    hindi: 'नमस्ते शिक्षक / गुरुजी',
+    english: 'Greetings Teacher',
+    teacherAdvice: 'बच्चा आपको आदरपूर्वक अभिवादन कर रहा है। उत्तर में "जोहार बाबू" या "सागुन दाराम" कहें।',
+    keywords: ['johar', 'machet', 'जोहार', 'माचेत', 'ᱡᱚᱦᱟᱨ']
+  },
+  {
+    id: 'stu-2',
+    category: 'Needs & Comfort',
+    santhaliOlChiki: 'ᱫᱟᱜ ᱧᱩᱭᱟᱹᱧ ᱢᱟᱪᱮᱛ',
+    santhaliRoman: 'Dah ñuyan machet',
+    santhaliDevanagari: 'दाग ञुयां माचेत',
+    hindi: 'शिक्षक, मुझे पानी पीना है',
+    english: 'Teacher, I want to drink water',
+    teacherAdvice: 'बच्चा पानी पीने की अनुमति मांग रहा है। उत्तर में "हें, सेनोग में" (हाँ, जाओ) कहें।',
+    keywords: ['dah', 'ñuyan', 'पानी', 'दाग', 'दह', 'ᱫᱟᱜ']
+  },
+  {
+    id: 'stu-3',
+    category: 'Comprehension & Doubts',
+    santhaliOlChiki: 'ᱤᱧ ᱵᱟᱹᱧ ᱵᱩᱡᱷᱟᱹᱣ ᱫᱟᱲᱮᱭᱟᱫᱼᱟ',
+    santhaliRoman: 'Iñ bañ bujhaw daṛeyada',
+    santhaliDevanagari: 'इञ बां बुझाव दाड़ेयादा',
+    hindi: 'मुझे यह समझ नहीं आया',
+    english: 'I did not understand this lesson',
+    teacherAdvice: 'बच्चा हिचकिचाहट छोड़कर बता रहा है कि वह समझ नहीं पाया। प्यार से सरल शब्दों में दोबारा समझाएं।',
+    keywords: ['bujhaw', 'समझ', 'बुझाव', 'ᱵᱩᱡᱷᱟᱹᱣ', 'ban']
+  },
+  {
+    id: 'stu-4',
+    category: 'Classroom Materials',
+    santhaliOlChiki: 'ᱤᱧᱟᱜ ᱯᱩᱛᱷᱤ ᱵᱟᱹᱱᱩᱜᱼᱟ',
+    santhaliRoman: 'Iñag puthi banug-a',
+    santhaliDevanagari: 'इञाग पुथी बानुगा',
+    hindi: 'मेरे पास किताब नहीं है',
+    english: 'I do not have a book / primer',
+    teacherAdvice: 'बच्चे के पास पाठ्यपुस्तक नहीं है। उसे सहपाठी के साथ किताब साझा करने (Share) को कहें।',
+    keywords: ['puthi', 'banug', 'पुथी', 'किताब', 'ᱯᱩᱛᱷᱤ']
+  },
+  {
+    id: 'stu-5',
+    category: 'Permission',
+    santhaliOlChiki: 'ᱵᱟᱦᱨᱮ ᱥᱮᱱᱚᱜᱼᱟᱹᱧ ᱢᱟᱪᱮᱛ?',
+    santhaliRoman: 'Bahre senog-añ machet?',
+    santhaliDevanagari: 'बाहरे सेनोग-अं माचेत?',
+    hindi: 'शिक्षक, क्या मैं बाहर जा सकता हूँ?',
+    english: 'Teacher, may I go outside / restroom?',
+    teacherAdvice: 'बच्चा कक्षा से बाहर (शौचालय/हाथ धोने) जाने की अनुमति मांग रहा है।',
+    keywords: ['bahre', 'senog', 'बाहर', 'बाहरे', 'ᱵᱟᱦᱨᱮ']
+  },
+  {
+    id: 'stu-6',
+    category: 'Acknowledgment',
+    santhaliOlChiki: 'ᱦᱮᱸ ᱢᱟᱪᱮᱛ, ᱵᱩᱡᱷᱟᱹᱣ ᱠᱮᱫᱟᱹᱧ',
+    santhaliRoman: 'Hẽ machet, bujhaw kedañ',
+    santhaliDevanagari: 'हें माचेत, बुझाव केदां',
+    hindi: 'हाँ शिक्षक, मुझे समझ आ गया',
+    english: 'Yes teacher, I understood!',
+    teacherAdvice: 'बच्चा सीख गया है। "अड़ी भागी" (बहुत अच्छा) कहकर उसकी सराहना करें।',
+    keywords: ['he', 'bujhaw', 'हाँ', 'हें', 'बुझाव', 'ᱦᱮᱸ']
+  },
+  {
+    id: 'stu-7',
+    category: 'Work Completion',
+    santhaliOlChiki: 'ᱤᱧ ᱚᱞ ᱠᱮᱫᱟᱹᱧ ᱢᱟᱪᱮᱛ',
+    santhaliRoman: 'Iñ ol kedañ machet',
+    santhaliDevanagari: 'इञ ओल केदां माचेत',
+    hindi: 'शिक्षक, मैंने अपना काम लिख लिया है',
+    english: 'Teacher, I have written down my work',
+    teacherAdvice: 'बच्चे ने कार्य पूरा कर लिया है। उसकी कॉपी देखें और प्रोत्साहित करें।',
+    keywords: ['ol', 'kedañ', 'लिख', 'ओल', 'ᱚᱞ']
+  },
+  {
+    id: 'stu-8',
+    category: 'Repetition Request',
+    santhaliOlChiki: 'ᱟᱨᱦᱚᱸ ᱢᱤᱫᱫᱷᱟᱣ ᱞᱟᱹᱭ ᱢᱮ',
+    santhaliRoman: 'Arhõ middhaw lạymey',
+    santhaliDevanagari: 'आरहों मिदधाव लय में',
+    hindi: 'कृपया एक बार फिर से बताएं / दोहराएं',
+    english: 'Please say it once again',
+    teacherAdvice: 'बच्चा दोबारा सुनने का अनुरोध कर रहा है। धीमी गति और स्पष्ट उच्चारण के साथ दोहराएं।',
+    keywords: ['arho', 'middhaw', 'फिर', 'दोहराएं', 'आरहों', 'ᱟᱨᱦᱚᱸ']
+  }
+];
+
+export const STUDENT_SAMPLE_PROMPTS = [
+  { label: '🙏 Johar Machet (नमस्ते)', text: 'Johar machet' },
+  { label: '💧 Dah ñuyan (पानी पीना है)', text: 'Dah ñuyan machet' },
+  { label: '❓ Bañ bujhaw (समझ नहीं आया)', text: 'Iñ bañ bujhaw daṛeyada' },
+  { label: '📖 Puthi banug-a (किताब नहीं है)', text: 'Iñag puthi banug-a' },
+  { label: '🚶 Bahre senog-añ (बाहर जाऊं?)', text: 'Bahre senog-añ machet?' },
+  { label: '✅ Hẽ bujhaw kedañ (समझ गया)', text: 'Hẽ machet, bujhaw kedañ' },
+  { label: '✏️ Ol kedañ (लिख लिया)', text: 'Iñ ol kedañ machet' },
+  { label: '🔁 Arhõ middhaw (दोहराएं)', text: 'Arhõ middhaw lạymey' }
+];

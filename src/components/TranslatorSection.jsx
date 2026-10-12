@@ -1,440 +1,738 @@
 import React, { useState, useEffect } from 'react';
 import { SUPPORTED_LANGUAGES } from '../data/languages';
-import { SAMPLE_PROMPTS } from '../data/curatedPhrases';
-import { translateHindiToTribal } from '../services/translatorService';
+import { 
+  SAMPLE_PROMPTS, 
+  STUDENT_SAMPLE_PROMPTS 
+} from '../data/curatedPhrases';
+import { 
+  translateHindiToTribal, 
+  translateSanthaliToHindi 
+} from '../services/translatorService';
 import { speakText, stopSpeech } from '../services/speechService';
+import { speechRecognizer, isSpeechRecognitionSupported } from '../services/speechRecognitionService';
 
 export default function TranslatorSection({ onOpenApiGuide }) {
-  const [inputText, setInputText] = useState('नमस्ते बच्चों, कक्षा में आपका स्वागत है');
-  const [selectedLanguage, setSelectedLanguage] = useState('sat');
-  const [isLoading, setIsLoading] = useState(false);
-  const [translationResult, setTranslationResult] = useState(null);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speechNotice, setSpeechNotice] = useState('');
-  const [copiedField, setCopiedField] = useState('');
+  // Mode: 'teacher' (Hindi -> Santhali), 'student' (Santhali -> Hindi), or 'dual' (Both together)
+  const [activeMode, setActiveMode] = useState('teacher');
 
-  // Initial load: translate the initial default sentence
+  // Teacher State (Hindi -> Santhali)
+  const [teacherHindiText, setTeacherHindiText] = useState('नमस्ते बच्चों, कक्षा में आपका स्वागत है');
+  const [teacherTranslation, setTeacherTranslation] = useState(null);
+  const [isTeacherLoading, setIsTeacherLoading] = useState(false);
+  const [isTeacherListening, setIsTeacherListening] = useState(false);
+  const [teacherError, setTeacherError] = useState('');
+  const [isTeacherSpeaking, setIsTeacherSpeaking] = useState(false);
+
+  // Student State (Santhali -> Hindi)
+  const [studentSanthaliText, setStudentSanthaliText] = useState('Johar machet');
+  const [studentTranslation, setStudentTranslation] = useState(null);
+  const [isStudentLoading, setIsStudentLoading] = useState(false);
+  const [isStudentListening, setIsStudentListening] = useState(false);
+  const [studentError, setStudentError] = useState('');
+  const [isStudentSpeaking, setIsStudentSpeaking] = useState(false);
+
+  // Target Tribal Language Selection
+  const [selectedLanguage, setSelectedLanguage] = useState('sat');
+  const [copiedKey, setCopiedKey] = useState('');
+  const [speechNotice, setSpeechNotice] = useState('');
+
+  // Initial translation on component mount
   useEffect(() => {
-    handleTranslate(inputText);
+    handleTranslateTeacher(teacherHindiText);
+    handleTranslateStudent(studentSanthaliText);
+
+    return () => {
+      speechRecognizer.stop();
+      stopSpeech();
+    };
   }, []);
 
-  const handleTranslate = async (textToTranslate = inputText) => {
-    const text = (textToTranslate || '').trim();
-    setErrorMessage('');
+  // -------------------------------------------------------------------------
+  // Teacher Actions: Hindi -> Santhali
+  // -------------------------------------------------------------------------
+  const handleTranslateTeacher = async (text = teacherHindiText) => {
+    const trimmed = (text || '').trim();
+    setTeacherError('');
     setSpeechNotice('');
 
-    if (!text) {
-      setErrorMessage('⚠️ कृपया अनुवाद के लिए कोई हिंदी वाक्य दर्ज करें (Please enter a Hindi classroom sentence).');
-      setTranslationResult(null);
+    if (!trimmed) {
+      setTeacherError('⚠️ कृपया शिक्षक का हिंदी वाक्य दर्ज करें या माइक पर बोलें (Please enter or speak a Hindi sentence).');
+      setTeacherTranslation(null);
       return;
     }
 
-    setIsLoading(true);
+    setIsTeacherLoading(true);
     stopSpeech();
-    setIsSpeaking(false);
+    setIsTeacherSpeaking(false);
 
     try {
-      const result = await translateHindiToTribal({
-        text,
+      const res = await translateHindiToTribal({
+        text: trimmed,
         targetLanguageCode: selectedLanguage
       });
-      setTranslationResult(result);
+      setTeacherTranslation(res);
     } catch (err) {
-      setErrorMessage(err.message || 'अनुवाद प्रक्रिया में त्रुटि हुई (Translation process failed).');
-      setTranslationResult(null);
+      setTeacherError(err.message || 'अनुवाद विफल रहा (Translation failed).');
+      setTeacherTranslation(null);
     } finally {
-      setIsLoading(false);
+      setIsTeacherLoading(false);
     }
   };
 
-  const handleSampleClick = (promptText) => {
-    setInputText(promptText);
-    setErrorMessage('');
-    handleTranslate(promptText);
-  };
-
-  const handleClear = () => {
-    setInputText('');
-    setTranslationResult(null);
-    setErrorMessage('');
+  const startTeacherListening = () => {
+    setTeacherError('');
     stopSpeech();
-    setIsSpeaking(false);
-  };
+    setIsTeacherSpeaking(false);
 
-  const handleSpeak = (textToSpeak, isHindi = false) => {
-    if (isSpeaking) {
-      stopSpeech();
-      setIsSpeaking(false);
+    if (!isSpeechRecognitionSupported()) {
+      setTeacherError('⚠️ आपके ब्राउज़र में माइक्रोफ़ोन स्पीच रिकग्निशन समर्थित नहीं है। कृपया Google Chrome का उपयोग करें या नीचे दिए गए त्वरित वाक्य चुनें।');
       return;
     }
 
-    setSpeechNotice('');
-    const langCode = isHindi ? 'hi' : selectedLanguage;
-
-    const res = speakText({
-      text: textToSpeak,
-      langCode,
-      romanPhonetic: translationResult?.santhaliRoman || '',
-      devanagariPhonetic: translationResult?.santhaliDevanagari || '',
-      onStart: () => setIsSpeaking(true),
-      onEnd: () => setIsSpeaking(false),
-      onError: (err) => {
-        setIsSpeaking(false);
-        setSpeechNotice('⚠️ आपका ब्राउज़र इस ध्वनि इंजन का समर्थन नहीं कर रहा (Speech synthesis unavailable on this device).');
+    const started = speechRecognizer.start({
+      mode: 'teacher',
+      lang: 'hi-IN',
+      onStart: () => {
+        setIsTeacherListening(true);
+      },
+      onResult: ({ rawText, finalTranscript }) => {
+        const textToUse = finalTranscript || rawText;
+        if (textToUse) {
+          setTeacherHindiText(textToUse);
+          handleTranslateTeacher(textToUse);
+        }
+      },
+      onError: (errMsg) => {
+        setIsTeacherListening(false);
+        setTeacherError(errMsg);
+      },
+      onEnd: () => {
+        setIsTeacherListening(false);
       }
     });
 
-    if (res && res.voiceInfo && !res.voiceInfo.isNative && !isHindi) {
+    if (!started) {
+      setIsTeacherListening(false);
+    }
+  };
+
+  const stopTeacherListening = () => {
+    speechRecognizer.stop();
+    setIsTeacherListening(false);
+  };
+
+  const handleSpeakSanthali = () => {
+    if (isTeacherSpeaking) {
+      stopSpeech();
+      setIsTeacherSpeaking(false);
+      return;
+    }
+
+    if (!teacherTranslation) return;
+    setSpeechNotice('');
+
+    const res = speakText({
+      text: teacherTranslation.santhaliRoman || teacherTranslation.santhaliDevanagari,
+      langCode: selectedLanguage,
+      romanPhonetic: teacherTranslation.santhaliRoman || '',
+      devanagariPhonetic: teacherTranslation.santhaliDevanagari || '',
+      onStart: () => setIsTeacherSpeaking(true),
+      onEnd: () => setIsTeacherSpeaking(false),
+      onError: () => {
+        setIsTeacherSpeaking(false);
+        setSpeechNotice('⚠️ ब्राउज़र स्पीच इंजन इस उच्चारण का समर्थन नहीं कर रहा (TTS voice unavailable).');
+      }
+    });
+
+    if (res?.voiceInfo && !res.voiceInfo.isNative) {
       setSpeechNotice(`📢 ध्वनि सूचना: ${res.voiceInfo.label} का उपयोग करके उच्चारण किया गया।`);
     }
   };
 
-  const handleCopy = (content, fieldName) => {
+  // -------------------------------------------------------------------------
+  // Student Actions: Santhali -> Hindi
+  // -------------------------------------------------------------------------
+  const handleTranslateStudent = async (text = studentSanthaliText) => {
+    const trimmed = (text || '').trim();
+    setStudentError('');
+    setSpeechNotice('');
+
+    if (!trimmed) {
+      setStudentError('⚠️ कृपया छात्र का संथाली वाक्य दर्ज करें या माइक पर बोलें (Please enter or speak a Santhali sentence).');
+      setStudentTranslation(null);
+      return;
+    }
+
+    setIsStudentLoading(true);
+    stopSpeech();
+    setIsStudentSpeaking(false);
+
+    try {
+      const res = await translateSanthaliToHindi({
+        text: trimmed
+      });
+      setStudentTranslation(res);
+    } catch (err) {
+      setStudentError(err.message || 'अनुवाद विफल रहा (Translation failed).');
+      setStudentTranslation(null);
+    } finally {
+      setIsStudentLoading(false);
+    }
+  };
+
+  const startStudentListening = () => {
+    setStudentError('');
+    stopSpeech();
+    setIsStudentSpeaking(false);
+
+    if (!isSpeechRecognitionSupported()) {
+      setStudentError('⚠️ आपके ब्राउज़र में माइक्रोफ़ोन स्पीच रिकग्निशन समर्थित नहीं है। कृपया Google Chrome का उपयोग करें या नीचे दिए गए त्वरित संथाली वाक्य चुनें।');
+      return;
+    }
+
+    const started = speechRecognizer.start({
+      mode: 'student',
+      // Web Speech API uses standard hi-IN or en-IN for phonetics
+      lang: 'hi-IN',
+      onStart: () => {
+        setIsStudentListening(true);
+      },
+      onResult: ({ rawText, finalTranscript }) => {
+        const textToUse = finalTranscript || rawText;
+        if (textToUse) {
+          setStudentSanthaliText(textToUse);
+          handleTranslateStudent(textToUse);
+        }
+      },
+      onError: (errMsg) => {
+        setIsStudentListening(false);
+        setStudentError(errMsg);
+      },
+      onEnd: () => {
+        setIsStudentListening(false);
+      }
+    });
+
+    if (!started) {
+      setIsStudentListening(false);
+    }
+  };
+
+  const stopStudentListening = () => {
+    speechRecognizer.stop();
+    setIsStudentListening(false);
+  };
+
+  const handleSpeakHindi = () => {
+    if (isStudentSpeaking) {
+      stopSpeech();
+      setIsStudentSpeaking(false);
+      return;
+    }
+
+    if (!studentTranslation) return;
+    setSpeechNotice('');
+
+    speakText({
+      text: studentTranslation.hindiTranslation,
+      langCode: 'hi',
+      onStart: () => setIsStudentSpeaking(true),
+      onEnd: () => setIsStudentSpeaking(false),
+      onError: () => {
+        setIsStudentSpeaking(false);
+        setSpeechNotice('⚠️ हिंदी स्पीच इंजन अनुपलब्ध है (Hindi speech engine unavailable).');
+      }
+    });
+  };
+
+  const handleCopy = (content, key) => {
     if (!content) return;
     navigator.clipboard.writeText(content).then(() => {
-      setCopiedField(fieldName);
-      setTimeout(() => setCopiedField(''), 2200);
-    }).catch(() => {
-      // Fallback
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(''), 2000);
     });
   };
 
   const currentLangObj = SUPPORTED_LANGUAGES.find(l => l.code === selectedLanguage) || SUPPORTED_LANGUAGES[0];
 
   return (
-    <div className="translator-wrapper">
-      {/* Upper Control Bar: Language Selectors */}
-      <div className="lang-bar-card">
-        <div className="lang-selector-group">
-          <div className="lang-badge-source">
-            <span className="lang-role-tag">Source Language:</span>
-            <div className="lang-pill active-pill">
-              <span className="lang-flag">🇮🇳</span>
-              <strong>Hindi (हिंदी)</strong>
+    <div className="bidirectional-translator-wrapper">
+      {/* Mode Navigation Tabs */}
+      <div className="mode-switcher-bar">
+        <div className="mode-tabs-group" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeMode === 'teacher'}
+            className={`mode-tab-btn ${activeMode === 'teacher' ? 'mode-tab-active teacher-tab' : ''}`}
+            onClick={() => setActiveMode('teacher')}
+          >
+            <span className="mode-tab-icon">👩‍🏫</span>
+            <div className="mode-tab-labels">
+              <span className="mode-tab-primary">Teacher Mode</span>
+              <span className="mode-tab-secondary">Hindi Speech ➔ Santhali</span>
             </div>
-          </div>
+          </button>
 
-          <div className="lang-arrow-wrap">
-            <span className="lang-arrow">➔</span>
-          </div>
-
-          <div className="lang-badge-target">
-            <label htmlFor="target-lang-select" className="lang-role-tag">Target Tribal Language:</label>
-            <div className="select-container">
-              <select
-                id="target-lang-select"
-                className="select-dropdown"
-                value={selectedLanguage}
-                onChange={(e) => {
-                  setSelectedLanguage(e.target.value);
-                  setErrorMessage('');
-                }}
-              >
-                {SUPPORTED_LANGUAGES.map((lang) => (
-                  <option key={lang.code} value={lang.code}>
-                    {lang.name} {lang.status === 'roadmap' ? `(${lang.tag})` : '— Ol Chiki'}
-                  </option>
-                ))}
-              </select>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeMode === 'student'}
+            className={`mode-tab-btn ${activeMode === 'student' ? 'mode-tab-active student-tab' : ''}`}
+            onClick={() => setActiveMode('student')}
+          >
+            <span className="mode-tab-icon">🧒</span>
+            <div className="mode-tab-labels">
+              <span className="mode-tab-primary">Student Mode</span>
+              <span className="mode-tab-secondary">Santhali Speech ➔ Hindi</span>
             </div>
-          </div>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeMode === 'dual'}
+            className={`mode-tab-btn ${activeMode === 'dual' ? 'mode-tab-active dual-tab' : ''}`}
+            onClick={() => setActiveMode('dual')}
+          >
+            <span className="mode-tab-icon">🔄</span>
+            <div className="mode-tab-labels">
+              <span className="mode-tab-primary">Dual Classroom View</span>
+              <span className="mode-tab-secondary">Both Modes Side-by-Side</span>
+            </div>
+          </button>
         </div>
 
-        <div className="target-lang-meta">
-          <span className="meta-item">
-            <strong>Script:</strong> {currentLangObj.nativeScript}
-          </span>
-          <span className="meta-item">
-            <strong>Regions:</strong> {currentLangObj.state}
-          </span>
-          <span className={`status-chip ${currentLangObj.status}`}>
-            {currentLangObj.statusLabel}
-          </span>
+        {/* Target Language Dropdown */}
+        <div className="target-lang-mini-selector">
+          <label htmlFor="target-lang-dropdown" className="mini-select-label">Target Tribal Language:</label>
+          <select
+            id="target-lang-dropdown"
+            className="mini-select"
+            value={selectedLanguage}
+            onChange={(e) => setSelectedLanguage(e.target.value)}
+          >
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.name} {lang.status === 'roadmap' ? '(Roadmap)' : '— Ol Chiki'}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Main Dual Workspace Grid */}
-      <div className="translator-workspace">
-        {/* Left Side: Teacher's Hindi Input Box */}
-        <div className="card-panel input-panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <span className="panel-icon">✍️</span>
-              <div>
-                <h3 className="panel-title">Classroom Hindi Sentence</h3>
-                <p className="panel-subtitle">शिक्षक का हिंदी वाक्य</p>
+      {/* Main Translation Cards Grid */}
+      <div className={`bidirectional-grid ${activeMode === 'dual' ? 'dual-layout' : 'single-layout'}`}>
+        
+        {/* ================================================================= */}
+        {/* PANEL 1: TEACHER'S HINDI SPEECH ➔ SANTHALI TRANSLATION            */}
+        {/* ================================================================= */}
+        {(activeMode === 'teacher' || activeMode === 'dual') && (
+          <section className="speech-direction-card teacher-card" aria-label="Teacher Hindi to Santhali Translator">
+            <div className="card-top-banner teacher-banner">
+              <div className="banner-title-wrap">
+                <span className="banner-badge">👩‍🏫 Teacher Mode (शिक्षक संवाद)</span>
+                <h3>Hindi Speech ➔ Santhali Translation</h3>
               </div>
+              <span className="direction-flow-pill">Hindi ➔ Ol Chiki</span>
             </div>
 
-            {inputText && (
-              <button 
-                type="button" 
-                className="btn-text-action" 
-                onClick={handleClear}
-                title="Clear input"
-              >
-                Clear / मिटाएं
-              </button>
-            )}
-          </div>
+            {/* 1. RECOGNIZED HINDI SPEECH BOX (EDITABLE) */}
+            <div className="box-section input-speech-box">
+              <div className="box-header-row">
+                <label htmlFor="teacher-speech-input" className="box-label">
+                  <span className="step-circle">1</span>
+                  <span>Teacher's Recognized Hindi Speech (पहचाना गया हिंदी वाक्य):</span>
+                </label>
 
-          <div className="textarea-container">
-            <textarea
-              className="sentence-textarea"
-              rows={4}
-              value={inputText}
-              onChange={(e) => {
-                setInputText(e.target.value);
-                if (errorMessage) setErrorMessage('');
-              }}
-              placeholder="उदाहरण: सभी बच्चे बैठ जाएं / अपनी किताब खोलो..."
-              aria-label="Enter Hindi classroom sentence"
-            />
-            <div className="textarea-footer">
-              <span className="char-count">{inputText.length} अक्षर (characters)</span>
-              {inputText.trim() && (
-                <button
-                  type="button"
-                  className="btn-mini-audio"
-                  onClick={() => handleSpeak(inputText, true)}
-                  title="Listen to Hindi sentence"
-                >
-                  🔊 Listen Hindi
-                </button>
+                {/* Microphone Toggle Button */}
+                <div className="mic-actions-group">
+                  {isTeacherListening ? (
+                    <button
+                      type="button"
+                      className="btn-mic-active pulse-mic"
+                      onClick={stopTeacherListening}
+                      title="Stop microphone recording"
+                    >
+                      <span className="mic-symbol">⏹</span>
+                      <span>Stop Listening</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-mic-start"
+                      onClick={startTeacherListening}
+                      title="Click to speak in Hindi using microphone"
+                    >
+                      <span className="mic-symbol">🎙️</span>
+                      <span>Speak Hindi (बोलें)</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Active Listening Indicator */}
+              {isTeacherListening && (
+                <div className="live-listening-banner animate-fade-in" role="status">
+                  <span className="pulsing-record-dot"></span>
+                  <strong>Listening now... कृपया हिंदी में कक्षा का वाक्य बोलें</strong>
+                  <div className="mini-sound-waves">
+                    <span className="wave-bar w-1"></span>
+                    <span className="wave-bar w-2"></span>
+                    <span className="wave-bar w-3"></span>
+                  </div>
+                </div>
+              )}
+
+              {/* Editable Textarea for Recognized Speech */}
+              <div className="textarea-wrapper">
+                <textarea
+                  id="teacher-speech-input"
+                  className="speech-textarea"
+                  rows={3}
+                  value={teacherHindiText}
+                  onChange={(e) => {
+                    setTeacherHindiText(e.target.value);
+                    if (teacherError) setTeacherError('');
+                  }}
+                  placeholder="यहाँ शिक्षक का हिंदी वाक्य दिखाई देगा, आप इसे टाइप या संपादित भी कर सकते हैं..."
+                />
+                <div className="textarea-meta-bar">
+                  <span className="hint-text">✏️ You can edit the recognized Hindi text above anytime.</span>
+                  <button
+                    type="button"
+                    className="btn-action-small"
+                    onClick={() => handleTranslateTeacher(teacherHindiText)}
+                    disabled={isTeacherLoading}
+                  >
+                    {isTeacherLoading ? 'Translating...' : 'Translate / अनुवाद करें ➔'}
+                  </button>
+                </div>
+              </div>
+
+              {/* One-Click Sample Prompts */}
+              <div className="quick-prompts-row">
+                <span className="prompts-title">⚡ Quick Prompts (त्वरित वाक्य):</span>
+                <div className="prompts-chips-wrap">
+                  {SAMPLE_PROMPTS.slice(0, 4).map((p, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className="btn-prompt-chip"
+                      onClick={() => {
+                        setTeacherHindiText(p.text);
+                        handleTranslateTeacher(p.text);
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Error Notice */}
+              {teacherError && (
+                <div className="alert-message error-alert animate-shake" role="alert">
+                  <span className="alert-icon">⚠️</span>
+                  <div className="alert-body">
+                    <p>{teacherError}</p>
+                  </div>
+                  <button type="button" className="btn-alert-dismiss" onClick={() => setTeacherError('')}>✕</button>
+                </div>
               )}
             </div>
-          </div>
 
-          {/* Quick Classroom Sentence Chips */}
-          <div className="sample-chips-section">
-            <div className="chips-title-row">
-              <span className="chips-label">⚡ One-Click Teacher Prompts (त्वरित प्राथमिक वाक्य):</span>
-            </div>
-            <div className="chips-container" role="group" aria-label="Sample classroom sentences">
-              {SAMPLE_PROMPTS.map((sample, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  className={`chip-btn ${inputText === sample.text ? 'chip-active' : ''}`}
-                  onClick={() => handleSampleClick(sample.text)}
-                >
-                  {sample.label}
-                </button>
-              ))}
-            </div>
-          </div>
+            {/* 2. TRANSLATED SANTHALI TEXT BOX (SEPARATE BOX BELOW) */}
+            <div className="box-section translation-result-box">
+              <div className="box-header-row">
+                <div className="box-label">
+                  <span className="step-circle step-green">2</span>
+                  <span>Santhali Classroom Translation (संथाली अनुवाद):</span>
+                </div>
 
-          {/* Primary Action Button */}
-          <div className="panel-action-bar">
-            <button
-              type="button"
-              className={`btn-primary-translate ${isLoading ? 'loading' : ''}`}
-              onClick={() => handleTranslate(inputText)}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <span className="spinner-dot"></span>
-                  <span>Translating / अनुवाद हो रहा है...</span>
-                </>
+                {teacherTranslation && (
+                  <button
+                    type="button"
+                    className={`btn-audio-playback ${isTeacherSpeaking ? 'audio-active' : ''}`}
+                    onClick={handleSpeakSanthali}
+                    aria-label="Play translated Santhali audio"
+                  >
+                    <span className="audio-icon">{isTeacherSpeaking ? '⏹' : '🔊'}</span>
+                    <span>{isTeacherSpeaking ? 'Stop Audio' : 'Play Santhali Audio'}</span>
+                  </button>
+                )}
+              </div>
+
+              {isTeacherLoading ? (
+                <div className="loading-card">
+                  <div className="spinner-circle"></div>
+                  <span>Translating Hindi to verified Santhali Ol Chiki...</span>
+                </div>
+              ) : teacherTranslation ? (
+                <div className="translation-display-card animate-fade-in">
+                  {/* Verified or Demo Badge */}
+                  <div className="result-badge-row">
+                    <span className={`badge-pill ${teacherTranslation.isVerified ? 'badge-verified' : 'badge-demo'}`}>
+                      {teacherTranslation.isVerified ? '✓ Verified Primer Match' : '⚠️ Demo Sandbox Mode'}
+                    </span>
+                    <span className="badge-script">Ol Chiki Script</span>
+                  </div>
+
+                  {/* Primary Ol Chiki Text Display */}
+                  <div className="ol-chiki-screen">
+                    {teacherTranslation.santhaliOlChiki}
+                  </div>
+
+                  {/* Phonetic Pronunciation Guide */}
+                  <div className="phonetics-dual-row">
+                    <div className="phonetic-col">
+                      <span className="phonetic-tag">Roman / English Pronunciation:</span>
+                      <p className="phonetic-val">{teacherTranslation.santhaliRoman}</p>
+                    </div>
+                    <div className="phonetic-col">
+                      <span className="phonetic-tag">देवनागरी उच्चारण (Hindi phonetic):</span>
+                      <p className="phonetic-val">{teacherTranslation.santhaliDevanagari}</p>
+                    </div>
+                  </div>
+
+                  {/* English Meaning & Teacher Context */}
+                  <div className="meaning-strip">
+                    <strong>English Meaning:</strong> <span>{teacherTranslation.english}</span>
+                  </div>
+
+                  <div className="pedagogy-tip-strip">
+                    <span className="tip-star">💡</span>
+                    <span>{teacherTranslation.teacherTip}</span>
+                  </div>
+
+                  {/* Unverified Custom Input Warning */}
+                  {teacherTranslation.isDemoSimulation && (
+                    <div className="demo-integrity-box">
+                      <p>{teacherTranslation.demoNotice}</p>
+                      <button type="button" className="btn-link" onClick={onOpenApiGuide}>
+                        Connect Bhashini / IndicTrans2 API ➔
+                      </button>
+                    </div>
+                  )}
+                </div>
               ) : (
-                <>
-                  <span className="btn-icon">✨</span>
-                  <span>Translate to {currentLangObj.name.split(' ')[0]} / अनुवाद करें</span>
-                </>
+                <div className="empty-box-state">
+                  <span>Speak or enter a Hindi sentence above to see the Santhali translation here.</span>
+                </div>
               )}
-            </button>
-          </div>
-
-          {/* Error Alert Message */}
-          {errorMessage && (
-            <div className="alert-box error-alert animate-shake" role="alert">
-              <span className="alert-icon">⚠️</span>
-              <div className="alert-content">
-                <strong>त्रुटि (Validation Note):</strong>
-                <p>{errorMessage}</p>
-              </div>
-              <button 
-                type="button" 
-                className="alert-close" 
-                onClick={() => setErrorMessage('')}
-              >
-                ✕
-              </button>
             </div>
-          )}
-        </div>
+          </section>
+        )}
 
-        {/* Right Side: Translation Output Card */}
-        <div className="card-panel output-panel">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <span className="panel-icon">🎯</span>
-              <div>
-                <h3 className="panel-title">Santhali Classroom Translation</h3>
-                <p className="panel-subtitle">संथाली कक्षा अनुवाद एवं उच्चारण मार्गदर्शिका</p>
+        {/* ================================================================= */}
+        {/* PANEL 2: STUDENT'S SANTHALI SPEECH ➔ HINDI TRANSLATION            */}
+        {/* ================================================================= */}
+        {(activeMode === 'student' || activeMode === 'dual') && (
+          <section className="speech-direction-card student-card" aria-label="Student Santhali to Hindi Translator">
+            <div className="card-top-banner student-banner">
+              <div className="banner-title-wrap">
+                <span className="banner-badge student-badge">🧒 Student Mode (छात्र संवाद)</span>
+                <h3>Student Santhali Speech ➔ Hindi Translation</h3>
               </div>
+              <span className="direction-flow-pill student-flow">Santhali ➔ Hindi</span>
             </div>
 
-            {translationResult && (
-              <div className="status-indicator-wrap">
-                {translationResult.isVerified ? (
-                  <span className="badge-verified">
-                    <span className="badge-dot"></span>
-                    Verified Primer
-                  </span>
-                ) : (
-                  <span className="badge-demo">
-                    <span className="badge-dot-demo"></span>
-                    Demo Sandbox Mode
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+            {/* 1. RECOGNIZED SANTHALI SPEECH BOX (EDITABLE) */}
+            <div className="box-section input-speech-box">
+              <div className="box-header-row">
+                <label htmlFor="student-speech-input" className="box-label">
+                  <span className="step-circle step-teal">1</span>
+                  <span>Student's Recognized Santhali Speech (छात्र की बोली गई संथाली):</span>
+                </label>
 
-          {isLoading ? (
-            <div className="output-loading-state">
-              <div className="pulse-loader"></div>
-              <p>Fetching verified Santhali classroom lexicon...</p>
-              <span className="sub-loader-text">Comparing against Ol Chiki primary education primer</span>
-            </div>
-          ) : translationResult ? (
-            <div className="output-content animate-fade-in">
-              {/* Primary Ol Chiki Box */}
-              <div className="ol-chiki-highlight-card">
-                <div className="script-header-row">
-                  <span className="script-tag">ᱚᱞ ᱪᱤᱠᱤ (Ol Chiki Script)</span>
-                  <div className="card-actions-group">
+                {/* Microphone Toggle Button */}
+                <div className="mic-actions-group">
+                  {isStudentListening ? (
                     <button
                       type="button"
-                      className={`btn-icon-action ${copiedField === 'olchiki' ? 'copied' : ''}`}
-                      onClick={() => handleCopy(translationResult.santhaliOlChiki, 'olchiki')}
-                      title="Copy Ol Chiki text"
+                      className="btn-mic-active pulse-mic student-mic"
+                      onClick={stopStudentListening}
+                      title="Stop microphone recording"
                     >
-                      {copiedField === 'olchiki' ? '✓ Copied' : '📋 Copy Script'}
+                      <span className="mic-symbol">⏹</span>
+                      <span>Stop Listening</span>
                     </button>
-
+                  ) : (
                     <button
                       type="button"
-                      className={`btn-speaker-prominent ${isSpeaking ? 'speaking-active' : ''}`}
-                      onClick={() => handleSpeak(translationResult.santhaliRoman || translationResult.santhaliDevanagari)}
-                      title="Read aloud in Santhali pronunciation"
-                      aria-label="Speak Santhali translation"
+                      className="btn-mic-start student-mic-btn"
+                      onClick={startStudentListening}
+                      title="Click to speak Santhali words using microphone"
                     >
-                      <span className="speaker-symbol">{isSpeaking ? '⏹' : '🔊'}</span>
-                      <span className="speaker-text">{isSpeaking ? 'Stop' : 'Speak'}</span>
+                      <span className="mic-symbol">🎙️</span>
+                      <span>Speak Santhali (संथाली बोलें)</span>
                     </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Active Listening Indicator */}
+              {isStudentListening && (
+                <div className="live-listening-banner student-listening-banner animate-fade-in" role="status">
+                  <span className="pulsing-record-dot teal-dot"></span>
+                  <strong>Listening now... बच्चा संथाली में बोल सकता है (Speak Santhali)</strong>
+                  <div className="mini-sound-waves">
+                    <span className="wave-bar w-1"></span>
+                    <span className="wave-bar w-2"></span>
+                    <span className="wave-bar w-3"></span>
                   </div>
                 </div>
+              )}
 
-                <div className="ol-chiki-text-display">
-                  {translationResult.santhaliOlChiki}
+              {/* Editable Textarea for Recognized Santhali Speech */}
+              <div className="textarea-wrapper">
+                <textarea
+                  id="student-speech-input"
+                  className="speech-textarea"
+                  rows={3}
+                  value={studentSanthaliText}
+                  onChange={(e) => {
+                    setStudentSanthaliText(e.target.value);
+                    if (studentError) setStudentError('');
+                  }}
+                  placeholder="यहाँ छात्र का संथाली वाक्य दिखाई देगा (जैसे: Johar machet / ᱡᱚᱦᱟᱨ ᱢᱟᱪᱮᱛ)..."
+                />
+                <div className="textarea-meta-bar">
+                  <span className="hint-text">✏️ You can edit or type student Santhali words (Roman or Ol Chiki).</span>
+                  <button
+                    type="button"
+                    className="btn-action-small btn-student-action"
+                    onClick={() => handleTranslateStudent(studentSanthaliText)}
+                    disabled={isStudentLoading}
+                  >
+                    {isStudentLoading ? 'Translating...' : 'Translate to Hindi / हिंदी अनुवाद ➔'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Santhali Student Prompts */}
+              <div className="quick-prompts-row">
+                <span className="prompts-title">⚡ Common Student Expressions (छात्र अभिव्यक्ति):</span>
+                <div className="prompts-chips-wrap">
+                  {STUDENT_SAMPLE_PROMPTS.slice(0, 4).map((p, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className="btn-prompt-chip student-chip"
+                      onClick={() => {
+                        setStudentSanthaliText(p.text);
+                        handleTranslateStudent(p.text);
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Error Notice */}
+              {studentError && (
+                <div className="alert-message error-alert animate-shake" role="alert">
+                  <span className="alert-icon">⚠️</span>
+                  <div className="alert-body">
+                    <p>{studentError}</p>
+                  </div>
+                  <button type="button" className="btn-alert-dismiss" onClick={() => setStudentError('')}>✕</button>
+                </div>
+              )}
+            </div>
+
+            {/* 2. TRANSLATED HINDI TEXT BOX (SEPARATE BOX BELOW) */}
+            <div className="box-section translation-result-box">
+              <div className="box-header-row">
+                <div className="box-label">
+                  <span className="step-circle step-amber">2</span>
+                  <span>Hindi Translation for Teacher (शिक्षक के लिए हिंदी अनुवाद):</span>
                 </div>
 
-                {isSpeaking && (
-                  <div className="speaking-wave-bar">
-                    <span className="sound-wave wave-1"></span>
-                    <span className="sound-wave wave-2"></span>
-                    <span className="sound-wave wave-3"></span>
-                    <span className="sound-wave wave-4"></span>
-                    <span className="sound-wave-text">Playing classroom pronunciation via Web Speech API...</span>
-                  </div>
+                {studentTranslation && (
+                  <button
+                    type="button"
+                    className={`btn-audio-playback hindi-audio-btn ${isStudentSpeaking ? 'audio-active' : ''}`}
+                    onClick={handleSpeakHindi}
+                    aria-label="Play translated Hindi audio"
+                  >
+                    <span className="audio-icon">{isStudentSpeaking ? '⏹' : '🔊'}</span>
+                    <span>{isStudentSpeaking ? 'Stop Audio' : 'Play Hindi Audio'}</span>
+                  </button>
                 )}
               </div>
 
-              {/* Phonetic Pronunciation Guide (Roman & Devanagari) */}
-              <div className="phonetic-guide-grid">
-                <div className="guide-box">
-                  <div className="guide-box-header">
-                    <span className="guide-label">Roman / Latin Pronunciation:</span>
-                    <button 
-                      type="button"
-                      className="btn-tiny-copy"
-                      onClick={() => handleCopy(translationResult.santhaliRoman, 'roman')}
-                    >
-                      {copiedField === 'roman' ? '✓' : 'Copy'}
-                    </button>
-                  </div>
-                  <p className="guide-phonetic-text roman-text">
-                    {translationResult.santhaliRoman}
-                  </p>
-                  <span className="guide-hint">Ideal for teachers reading English alphabet</span>
+              {isStudentLoading ? (
+                <div className="loading-card">
+                  <div className="spinner-circle"></div>
+                  <span>Translating student Santhali to standard Hindi...</span>
                 </div>
-
-                <div className="guide-box">
-                  <div className="guide-box-header">
-                    <span className="guide-label">देवनागरी उच्चारण (Hindi phonetic):</span>
-                    <button 
-                      type="button"
-                      className="btn-tiny-copy"
-                      onClick={() => handleCopy(translationResult.santhaliDevanagari, 'devanagari')}
-                    >
-                      {copiedField === 'devanagari' ? '✓' : 'Copy'}
-                    </button>
+              ) : studentTranslation ? (
+                <div className="translation-display-card student-result-card animate-fade-in">
+                  {/* Verified Badge */}
+                  <div className="result-badge-row">
+                    <span className={`badge-pill ${studentTranslation.isVerified ? 'badge-verified' : 'badge-demo'}`}>
+                      {studentTranslation.isVerified ? '✓ Verified Student Expression' : '⚠️ Demo Sandbox Mode'}
+                    </span>
+                    <span className="badge-script">Hindi (हिंदी)</span>
                   </div>
-                  <p className="guide-phonetic-text devanagari-text">
-                    {translationResult.santhaliDevanagari}
-                  </p>
-                  <span className="guide-hint">हिंदी माध्यम के शिक्षकों के लिए आसान उच्चारण</span>
-                </div>
-              </div>
 
-              {/* English Pedagogical Meaning */}
-              <div className="pedagogy-meaning-row">
-                <span className="meaning-tag">English Meaning:</span>
-                <span className="meaning-val">{translationResult.english}</span>
-              </div>
-
-              {/* Teacher's Cultural Tip & Usage Context */}
-              <div className="teacher-tip-box">
-                <div className="tip-header">
-                  <span className="tip-icon">💡</span>
-                  <span className="tip-title">Teacher's Pedagogical Context (शिक्षक सुझाव):</span>
-                </div>
-                <p className="tip-text">{translationResult.teacherTip}</p>
-              </div>
-
-              {/* Transparent Unverified Input Notice */}
-              {translationResult.isDemoSimulation && (
-                <div className="unverified-warning-banner">
-                  <div className="warning-badge-row">
-                    <span className="warning-icon">🛡️</span>
-                    <strong>Linguistic Integrity / Demo Notice:</strong>
+                  {/* Primary Hindi Translation Text Display */}
+                  <div className="hindi-screen-highlight">
+                    {studentTranslation.hindiTranslation}
                   </div>
-                  <p className="warning-body">
-                    {translationResult.demoNotice}
-                  </p>
-                  <div className="api-hook-cta-row">
-                    <span>Want to connect a production translation AI model?</span>
-                    <button 
-                      type="button" 
-                      className="btn-link-action"
-                      onClick={onOpenApiGuide}
-                    >
-                      View Bhashini & IndicTrans2 API Guide ➔
-                    </button>
-                  </div>
-                </div>
-              )}
 
-              {/* Speech Engine Notice if active */}
-              {speechNotice && (
-                <div className="speech-info-pill">
-                  {speechNotice}
+                  {/* Santhali Original Representation */}
+                  <div className="phonetics-dual-row">
+                    <div className="phonetic-col">
+                      <span className="phonetic-tag">Ol Chiki Script (ᱚᱞ ᱪᱤᱠᱤ):</span>
+                      <p className="phonetic-val ol-chiki-val">{studentTranslation.santhaliOlChiki}</p>
+                    </div>
+                    <div className="phonetic-col">
+                      <span className="phonetic-tag">Roman / Phonetic:</span>
+                      <p className="phonetic-val">{studentTranslation.santhaliRoman}</p>
+                    </div>
+                  </div>
+
+                  {/* English Meaning & Teacher Context */}
+                  <div className="meaning-strip">
+                    <strong>English Meaning:</strong> <span>{studentTranslation.englishMeaning}</span>
+                  </div>
+
+                  <div className="pedagogy-tip-strip student-advice-strip">
+                    <span className="tip-star">🤝</span>
+                    <span><strong>Teacher Advice:</strong> {studentTranslation.teacherAdvice}</span>
+                  </div>
+
+                  {/* Unverified Notice */}
+                  {studentTranslation.isDemoSimulation && (
+                    <div className="demo-integrity-box">
+                      <p>{studentTranslation.demoNotice}</p>
+                      <button type="button" className="btn-link" onClick={onOpenApiGuide}>
+                        Connect Bhashini / IndicTrans2 API ➔
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="empty-box-state">
+                  <span>Speak or enter a student Santhali phrase above to see the Hindi translation here.</span>
                 </div>
               )}
             </div>
-          ) : (
-            <div className="output-placeholder-empty">
-              <div className="placeholder-icon">🌱</div>
-              <h4>No Sentence Translated Yet</h4>
-              <p>Type a Hindi sentence or click any of the quick teacher prompts to see verified Ol Chiki script and audio guidance.</p>
-            </div>
-          )}
-        </div>
+          </section>
+        )}
+
       </div>
+
+      {/* Global Speech Status Pill */}
+      {speechNotice && (
+        <div className="speech-global-notice animate-fade-in">
+          <span>{speechNotice}</span>
+          <button type="button" className="btn-alert-dismiss" onClick={() => setSpeechNotice('')}>✕</button>
+        </div>
+      )}
     </div>
   );
 }
