@@ -9,7 +9,12 @@ import {
   translateSanthaliToHindi 
 } from '../services/translatorService';
 import { speakText, stopSpeech } from '../services/speechService';
-import { speechRecognizer, isSpeechRecognitionSupported } from '../services/speechRecognitionService';
+import { 
+  speechRecognizer, 
+  isSpeechRecognitionSupported,
+  checkSanthaliSpeechSupport,
+  requestMicrophonePermission
+} from '../services/speechRecognitionService';
 
 export default function TranslatorSection({ onOpenApiGuide }) {
   // Mode: 'teacher' (Hindi -> Santhali), 'student' (Santhali -> Hindi), or 'dual' (Both together)
@@ -29,6 +34,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
   const [isStudentLoading, setIsStudentLoading] = useState(false);
   const [isStudentListening, setIsStudentListening] = useState(false);
   const [studentError, setStudentError] = useState('');
+  const [santhaliSpeechStatus, setSanthaliSpeechStatus] = useState('');
   const [isStudentSpeaking, setIsStudentSpeaking] = useState(false);
 
   // Target Tribal Language Selection
@@ -94,13 +100,15 @@ export default function TranslatorSection({ onOpenApiGuide }) {
       lang: 'hi-IN',
       onStart: () => {
         setIsTeacherListening(true);
+        setSpeechNotice('🎙️ Hindi speech recognition active (hi-IN). Speak clearly near the microphone.');
       },
-      onResult: ({ rawText, finalTranscript }) => {
+      onResult: ({ rawText, finalTranscript, isFinal }) => {
+        // Show live interim text in the textarea so the user sees what's being heard
         const textToUse = finalTranscript || rawText;
         if (textToUse) {
           setTeacherHindiText(textToUse);
-          handleTranslateTeacher(textToUse);
         }
+        // Do NOT auto-translate — let the user review and click "Translate" manually
       },
       onError: (errMsg) => {
         setIsTeacherListening(false);
@@ -108,6 +116,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
       },
       onEnd: () => {
         setIsTeacherListening(false);
+        setSpeechNotice('');
       }
     });
 
@@ -121,6 +130,39 @@ export default function TranslatorSection({ onOpenApiGuide }) {
     setIsTeacherListening(false);
   };
 
+  // Play Teacher's Hindi Input Text Aloud (Feature 2)
+  const handleSpeakTeacherHindi = () => {
+    if (isTeacherSpeaking) {
+      stopSpeech();
+      setIsTeacherSpeaking(false);
+      return;
+    }
+
+    const trimmed = (teacherHindiText || '').trim();
+    if (!trimmed) {
+      setTeacherError('⚠️ कोई हिंदी वाक्य नहीं है जो बोला जा सके। पहले वाक्य टाइप करें या माइक से बोलें (No Hindi text to speak. Type or speak a sentence first).');
+      return;
+    }
+
+    setSpeechNotice('');
+    stopSpeech(); // Stop any existing playback
+
+    const res = speakText({
+      text: trimmed,
+      langCode: 'hi',
+      onStart: () => setIsTeacherSpeaking(true),
+      onEnd: () => setIsTeacherSpeaking(false),
+      onError: () => {
+        setIsTeacherSpeaking(false);
+        setSpeechNotice('⚠️ हिंदी टेक्स्ट-टू-स्पीच इंजन अनुपलब्ध है (Hindi TTS voice unavailable in this browser).');
+      }
+    });
+
+    if (res?.voiceInfo && !res.voiceInfo.isNative) {
+      setSpeechNotice(`📢 ध्वनि सूचना: ${res.voiceInfo.label} — Hindi voice not natively available, using system fallback.`);
+    }
+  };
+
   const handleSpeakSanthali = () => {
     if (isTeacherSpeaking) {
       stopSpeech();
@@ -128,11 +170,23 @@ export default function TranslatorSection({ onOpenApiGuide }) {
       return;
     }
 
-    if (!teacherTranslation) return;
+    if (!teacherTranslation) {
+      setSpeechNotice('⚠️ कोई अनुवाद उपलब्ध नहीं है। पहले एक वाक्य का अनुवाद करें (No translation available to speak).');
+      return;
+    }
+
+    // Check if there's actual Santhali text to speak
+    const santhaliText = teacherTranslation.santhaliRoman || teacherTranslation.santhaliDevanagari;
+    if (!santhaliText) {
+      setSpeechNotice('⚠️ इस वाक्य का सत्यापित संथाली अनुवाद उपलब्ध नहीं है (No verified Santhali translation to speak).');
+      return;
+    }
+
     setSpeechNotice('');
+    stopSpeech(); // Stop any existing playback before starting new one
 
     const res = speakText({
-      text: teacherTranslation.santhaliRoman || teacherTranslation.santhaliDevanagari,
+      text: santhaliText,
       langCode: selectedLanguage,
       romanPhonetic: teacherTranslation.santhaliRoman || '',
       devanagariPhonetic: teacherTranslation.santhaliDevanagari || '',
@@ -140,12 +194,16 @@ export default function TranslatorSection({ onOpenApiGuide }) {
       onEnd: () => setIsTeacherSpeaking(false),
       onError: () => {
         setIsTeacherSpeaking(false);
-        setSpeechNotice('⚠️ ब्राउज़र स्पीच इंजन इस उच्चारण का समर्थन नहीं कर रहा (TTS voice unavailable).');
+        setSpeechNotice('⚠️ Santhali audio playback failed. No native Santhali TTS voice is available in this browser.');
       }
     });
 
-    if (res?.voiceInfo && !res.voiceInfo.isNative) {
-      setSpeechNotice(`📢 ध्वनि सूचना: ${res.voiceInfo.label} का उपयोग करके उच्चारण किया गया।`);
+    if (res?.voiceInfo) {
+      if (!res.voiceInfo.isNative) {
+        setSpeechNotice(`📢 ⚠️ Native Santhali TTS voice is NOT available. Playing pronunciation guide using "${res.voiceInfo.label}" as approximation. This is NOT verified Santhali audio — it reads the Roman/Devanagari phonetic guide aloud.`);
+      } else {
+        setSpeechNotice(`📢 Playing Santhali audio using ${res.voiceInfo.label}.`);
+      }
     }
   };
 
@@ -158,7 +216,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
     setSpeechNotice('');
 
     if (!trimmed) {
-      setStudentError('⚠️ कृपया छात्र का संथाली वाक्य दर्ज करें या माइक पर बोलें (Please enter or speak a Santhali sentence).');
+      setStudentError('⚠️ कृपया संथाली वाक्य दर्ज करें या माइक पर बोलें (Please enter or speak a Santhali sentence).');
       setStudentTranslation(null);
       return;
     }
@@ -180,36 +238,58 @@ export default function TranslatorSection({ onOpenApiGuide }) {
     }
   };
 
-  const startStudentListening = () => {
+  const startStudentListening = async () => {
     setStudentError('');
+    setSanthaliSpeechStatus('');
     stopSpeech();
     setIsStudentSpeaking(false);
 
     if (!isSpeechRecognitionSupported()) {
-      setStudentError('⚠️ आपके ब्राउज़र में माइक्रोफ़ोन स्पीच रिकग्निशन समर्थित नहीं है। कृपया Google Chrome का उपयोग करें या नीचे दिए गए त्वरित संथाली वाक्य चुनें।');
+      setStudentError('⚠️ आपके ब्राउज़र में माइक्रोफ़ोन स्पीच रिकग्निशन समर्थित नहीं है (Speech recognition is not supported in this browser). कृपया नीचे दिए गए बॉक्स में संथाली वाक्य मैन्युअल रूप से टाइप करें।');
       return;
     }
 
+    // 1. Explicitly request microphone permission
+    const permResult = await requestMicrophonePermission();
+    if (!permResult.granted) {
+      setStudentError(permResult.error);
+      return;
+    }
+
+    // 2. Check whether the current browser natively supports Santhali ('sat') speech recognition
+    const supportCheck = await checkSanthaliSpeechSupport();
+    if (!supportCheck.satSupported) {
+      setSanthaliSpeechStatus(supportCheck.message);
+    }
+
+    // 3. Attempt speech recognition using the Santhali language code 'sat'
     const started = speechRecognizer.start({
       mode: 'student',
-      // Web Speech API uses standard hi-IN or en-IN for phonetics
-      lang: 'hi-IN',
+      lang: 'sat',
       onStart: () => {
         setIsStudentListening(true);
+        setSpeechNotice('🎤 Attempting Santhali speech recognition with language code "sat"...');
       },
-      onResult: ({ rawText, finalTranscript }) => {
+      onResult: ({ rawText, finalTranscript, isFinal }) => {
         const textToUse = finalTranscript || rawText;
         if (textToUse) {
           setStudentSanthaliText(textToUse);
-          handleTranslateStudent(textToUse);
+          if (isFinal) {
+            handleTranslateStudent(textToUse);
+          }
         }
       },
       onError: (errMsg) => {
         setIsStudentListening(false);
+        setSpeechNotice('');
         setStudentError(errMsg);
       },
-      onEnd: () => {
+      onEnd: ({ hasReceivedResult } = {}) => {
         setIsStudentListening(false);
+        setSpeechNotice('');
+        if (!hasReceivedResult && !supportCheck.satSupported) {
+          setStudentError('⚠️ संथाली स्पीच रिकग्निशन (भाषा कोड: "sat") इस ब्राउज़र द्वारा समर्थित नहीं है (Santhali speech recognition with code "sat" is not supported by your current browser). कृपया नीचे दिए गए संथाली इनपुट बॉक्स में मैन्युअल रूप से टाइप करें या त्वरित संथाली वाक्य चुनें।');
+        }
       }
     });
 
@@ -221,6 +301,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
   const stopStudentListening = () => {
     speechRecognizer.stop();
     setIsStudentListening(false);
+    setSpeechNotice('');
   };
 
   const handleSpeakHindi = () => {
@@ -399,14 +480,25 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                 />
                 <div className="textarea-meta-bar">
                   <span className="hint-text">✏️ You can edit the recognized Hindi text above anytime.</span>
-                  <button
-                    type="button"
-                    className="btn-action-small"
-                    onClick={() => handleTranslateTeacher(teacherHindiText)}
-                    disabled={isTeacherLoading}
-                  >
-                    {isTeacherLoading ? 'Translating...' : 'Translate / अनुवाद करें ➔'}
-                  </button>
+                  <div className="textarea-actions-group">
+                    <button
+                      type="button"
+                      className={`btn-audio-small hindi-audio-btn ${isTeacherSpeaking ? 'audio-active' : ''}`}
+                      onClick={handleSpeakTeacherHindi}
+                      title="Play Hindi text aloud"
+                    >
+                      <span className="audio-icon">{isTeacherSpeaking ? '⏹' : '🔊'}</span>
+                      <span>{isTeacherSpeaking ? 'Stop' : 'Play Hindi Audio'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-action-small"
+                      onClick={() => handleTranslateTeacher(teacherHindiText)}
+                      disabled={isTeacherLoading}
+                    >
+                      {isTeacherLoading ? 'Translating...' : 'Translate / अनुवाद करें ➔'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -450,15 +542,16 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                   <span>Santhali Classroom Translation (संथाली अनुवाद):</span>
                 </div>
 
-                {teacherTranslation && teacherTranslation.isVerified && (
+                {teacherTranslation && (teacherTranslation.isVerified || (teacherTranslation.isMachineTranslated && (teacherTranslation.santhaliRoman || teacherTranslation.santhaliDevanagari))) && (
                   <button
                     type="button"
                     className={`btn-audio-playback ${isTeacherSpeaking ? 'audio-active' : ''}`}
                     onClick={handleSpeakSanthali}
-                    aria-label="Play translated Santhali audio"
+                    aria-label="Play Santhali pronunciation guide"
+                    title="Plays pronunciation guide using available TTS voice (may not be native Santhali)"
                   >
                     <span className="audio-icon">{isTeacherSpeaking ? '⏹' : '🔊'}</span>
-                    <span>{isTeacherSpeaking ? 'Stop Audio' : 'Play Santhali Audio'}</span>
+                    <span>{isTeacherSpeaking ? 'Stop Audio' : 'Play Pronunciation Guide'}</span>
                   </button>
                 )}
               </div>
@@ -466,7 +559,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
               {isTeacherLoading ? (
                 <div className="loading-card">
                   <div className="spinner-circle"></div>
-                  <span>Translating Hindi to verified Santhali Ol Chiki...</span>
+                  <span>Translating Hindi to Santhali Ol Chiki...</span>
                 </div>
               ) : teacherTranslation ? (
                 teacherTranslation.isVerified ? (
@@ -506,17 +599,73 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                       <span>{teacherTranslation.teacherTip}</span>
                     </div>
                   </div>
+                ) : teacherTranslation.isMachineTranslated ? (
+                  <div className="translation-display-card animate-fade-in" style={{ borderColor: '#F59E0B', background: '#FFFDF7' }}>
+                    {/* Unverified Machine Translation Badges */}
+                    <div className="result-badge-row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <span
+                        className="badge-pill"
+                        style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B', fontWeight: 700 }}
+                      >
+                        ⚠️ Unverified Machine Translation (Prototype)
+                      </span>
+                      <span className="badge-script" title={teacherTranslation.scriptCheckNote}>
+                        Ol Chiki Script Detected (Script check ≠ accuracy guarantee)
+                      </span>
+                    </div>
+
+                    {/* Primary Ol Chiki Text Display */}
+                    <div className="ol-chiki-screen">
+                      {teacherTranslation.santhaliOlChiki}
+                    </div>
+
+                    {/* Approximate Phonetic Pronunciation Guides (Only when reliable conversion is present) */}
+                    {(teacherTranslation.santhaliRoman || teacherTranslation.santhaliDevanagari) && (
+                      <div className="phonetics-dual-row">
+                        {teacherTranslation.santhaliRoman && (
+                          <div className="phonetic-col">
+                            <span className="phonetic-tag">Roman Pronunciation (Auto-Generated Approximation — Unverified):</span>
+                            <p className="phonetic-val">{teacherTranslation.santhaliRoman}</p>
+                          </div>
+                        )}
+                        {teacherTranslation.santhaliDevanagari && (
+                          <div className="phonetic-col">
+                            <span className="phonetic-tag">देवनागरी उच्चारण (Auto-Generated Approximation — Unverified):</span>
+                            <p className="phonetic-val">{teacherTranslation.santhaliDevanagari}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* English Meaning Approximation */}
+                    {teacherTranslation.english && (
+                      <div className="meaning-strip">
+                        <strong>English Meaning (Machine Approximation):</strong> <span>{teacherTranslation.english}</span>
+                      </div>
+                    )}
+
+                    {/* Transparency & Unofficial Endpoint Notice */}
+                    <div className="pedagogy-tip-strip" style={{ background: '#FEF3C7', borderColor: '#FCD34D', color: '#78350F', flexDirection: 'column', alignItems: 'flex-start', gap: '0.35rem' }}>
+                      <div>
+                        <strong>⚠️ Unverified Machine Output:</strong>{' '}
+                        <span>{teacherTranslation.accuracyDisclaimer}</span>
+                      </div>
+                      <div style={{ fontSize: '0.78rem', opacity: 0.9 }}>
+                        <strong>Source:</strong> {teacherTranslation.providerLabel} — <em>{teacherTranslation.scriptCheckNote}</em>
+                      </div>
+                    </div>
+                  </div>
                 ) : (
                   <div className="unverified-safeguard-card animate-fade-in">
                     <div className="safeguard-badge-row">
                       <span className="safeguard-badge">🛡️ सटीकता सुरक्षा (Accuracy Policy)</span>
-                      <span className="demo-mode-tag">Curated Primer Lookup</span>
+                      <span className="demo-mode-tag">Translation Unavailable — Fallback Active</span>
                     </div>
                     
                     <div className="unverified-card-header">
                       <span className="warning-symbol">⚠️</span>
                       <div>
-                        <h4>वाक्य प्राथमिक प्राइमर में उपलब्ध नहीं है (Not in Verified Lexicon)</h4>
+                        <h4>वाक्य का अनुवाद उपलब्ध नहीं हो सका (Translation Unavailable)</h4>
                         <p className="unverified-input-echo">
                           आपने दर्ज किया: <strong>"{teacherHindiText}"</strong>
                         </p>
@@ -549,7 +698,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                     <div className="safeguard-api-footer">
                       <span>किसी भी मनचाहे वाक्य का AI अनुवाद करने के लिए:</span>
                       <button type="button" className="btn-link" onClick={onOpenApiGuide}>
-                        Connect Bhashini / IndicTrans2 API ➔
+                        View AI Engine Architecture ➔
                       </button>
                     </div>
                   </div>
@@ -557,6 +706,204 @@ export default function TranslatorSection({ onOpenApiGuide }) {
               ) : (
                 <div className="empty-box-state">
                   <span>Speak or enter a Hindi sentence above to see the Santhali translation here.</span>
+                </div>
+              )}
+
+              {/* SANTHALI MICROPHONE & SANTHALI-TO-HINDI INPUT INSIDE SANTHALI CLASSROOM TRANSLATION SECTION */}
+              {activeMode === 'teacher' && (
+                <div className="santhali-inline-speech-panel" style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1.5px dashed var(--border-subtle)' }}>
+                  <div className="box-header-row">
+                    <label htmlFor="santhali-classroom-speech-input" className="box-label">
+                      <span className="step-circle step-teal">🎤</span>
+                      <span>Santhali Speech & Text Input (संथाली बोलें या लिखें ➔ हिंदी अनुवाद):</span>
+                    </label>
+
+                    <div className="mic-actions-group">
+                      {isStudentListening ? (
+                        <button
+                          type="button"
+                          className="btn-mic-active pulse-mic student-mic"
+                          onClick={stopStudentListening}
+                          title="Stop Santhali microphone recording"
+                        >
+                          <span className="mic-symbol">⏹</span>
+                          <span>Stop Listening</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-mic-start student-mic-btn"
+                          onClick={startStudentListening}
+                          title="Click to speak Santhali using microphone (language code: sat)"
+                        >
+                          <span>Speak Santhali 🎤</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Active Listening Indicator */}
+                  {isStudentListening && (
+                    <div className="live-listening-banner student-listening-banner animate-fade-in" role="status">
+                      <span className="pulsing-record-dot teal-dot"></span>
+                      <strong>Listening for Santhali (code: "sat")... संथाली में बोलें</strong>
+                      <div className="mini-sound-waves">
+                        <span className="wave-bar w-1"></span>
+                        <span className="wave-bar w-2"></span>
+                        <span className="wave-bar w-3"></span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Honest Browser Support Check Notice for 'sat' */}
+                  {santhaliSpeechStatus && (
+                    <div className="alert-message error-alert animate-fade-in" role="status" style={{ marginBottom: '0.75rem', background: '#FFFBEB', borderColor: '#F59E0B', color: '#92400E' }}>
+                      <span className="alert-icon">ℹ️</span>
+                      <div className="alert-body">
+                        <p>{santhaliSpeechStatus}</p>
+                      </div>
+                      <button type="button" className="btn-alert-dismiss" onClick={() => setSanthaliSpeechStatus('')}>✕</button>
+                    </div>
+                  )}
+
+                  {/* Editable Santhali Text Input Area */}
+                  <div className="textarea-wrapper">
+                    <textarea
+                      id="santhali-classroom-speech-input"
+                      className="speech-textarea"
+                      rows={2}
+                      value={studentSanthaliText}
+                      onChange={(e) => {
+                        setStudentSanthaliText(e.target.value);
+                        if (studentError) setStudentError('');
+                      }}
+                      placeholder="संथाली वाक्य बोलें या यहाँ टाइप करें (जैसे: Johar machet / ᱡᱚᱦᱟᱨ ᱢᱟᱪᱮᱛ)..."
+                    />
+                    <div className="textarea-meta-bar">
+                      <span className="hint-text">✏️ Manual Santhali input is always available (Roman, Ol Chiki, or Devanagari).</span>
+                      <button
+                        type="button"
+                        className="btn-action-small btn-student-action"
+                        onClick={() => handleTranslateStudent(studentSanthaliText)}
+                        disabled={isStudentLoading}
+                      >
+                        {isStudentLoading ? 'Translating...' : 'Translate to Hindi / हिंदी अनुवाद ➔'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Quick Santhali Prompts */}
+                  <div className="quick-prompts-row">
+                    <span className="prompts-title">⚡ Sample Santhali Phrases (संथाली वाक्य):</span>
+                    <div className="prompts-chips-wrap">
+                      {STUDENT_SAMPLE_PROMPTS.slice(0, 4).map((p, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          className="btn-prompt-chip student-chip"
+                          onClick={() => {
+                            setStudentSanthaliText(p.text);
+                            handleTranslateStudent(p.text);
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Santhali Mic / Input Error Notice */}
+                  {studentError && (
+                    <div className="alert-message error-alert animate-shake" role="alert">
+                      <span className="alert-icon">⚠️</span>
+                      <div className="alert-body">
+                        <p>{studentError}</p>
+                      </div>
+                      <button type="button" className="btn-alert-dismiss" onClick={() => setStudentError('')}>✕</button>
+                    </div>
+                  )}
+
+                  {/* Santhali -> Hindi Translation Output */}
+                  {studentTranslation && (
+                    <div style={{ marginTop: '0.9rem' }}>
+                      <div className="box-header-row" style={{ marginBottom: '0.5rem' }}>
+                        <div className="box-label">
+                          <span className="step-circle step-amber">➔</span>
+                          <span>Hindi Translation of Santhali Input (संथाली का हिंदी अनुवाद):</span>
+                        </div>
+                        {(studentTranslation.isVerified || studentTranslation.isMachineTranslated) && (
+                          <button
+                            type="button"
+                            className={`btn-audio-playback hindi-audio-btn ${isStudentSpeaking ? 'audio-active' : ''}`}
+                            onClick={handleSpeakHindi}
+                            aria-label="Play translated Hindi audio"
+                          >
+                            <span className="audio-icon">{isStudentSpeaking ? '⏹' : '🔊'}</span>
+                            <span>{isStudentSpeaking ? 'Stop Audio' : 'Play Hindi Audio'}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {studentTranslation.isVerified ? (
+                        <div className="translation-display-card student-result-card animate-fade-in">
+                          <div className="result-badge-row">
+                            <span className="badge-pill badge-verified">✓ {studentTranslation.verificationBadge || 'Verified Student Expression'}</span>
+                            <span className="badge-script">Santhali ➔ Hindi (हिंदी)</span>
+                          </div>
+                          <div className="hindi-screen-highlight">
+                            {studentTranslation.hindiTranslation}
+                          </div>
+                          <div className="phonetics-dual-row">
+                            <div className="phonetic-col">
+                              <span className="phonetic-tag">Ol Chiki Script (ᱚᱞ ᱪᱤᱠᱤ):</span>
+                              <p className="phonetic-val ol-chiki-val">{studentTranslation.santhaliOlChiki}</p>
+                            </div>
+                            <div className="phonetic-col">
+                              <span className="phonetic-tag">Roman / Phonetic:</span>
+                              <p className="phonetic-val">{studentTranslation.santhaliRoman}</p>
+                            </div>
+                          </div>
+                          <div className="meaning-strip">
+                            <strong>English Meaning:</strong> <span>{studentTranslation.englishMeaning}</span>
+                          </div>
+                        </div>
+                      ) : studentTranslation.isMachineTranslated ? (
+                        <div className="translation-display-card student-result-card animate-fade-in" style={{ borderColor: '#F59E0B', background: '#FFFDF7' }}>
+                          <div className="result-badge-row">
+                            <span className="badge-pill" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B', fontWeight: 700 }}>
+                              ⚠️ Unverified Machine Translation (Prototype)
+                            </span>
+                            <span className="badge-script">Santhali ➔ Hindi (हिंदी)</span>
+                          </div>
+                          <div className="hindi-screen-highlight">
+                            {studentTranslation.hindiTranslation}
+                          </div>
+                          <div className="pedagogy-tip-strip" style={{ background: '#FEF3C7', borderColor: '#FCD34D', color: '#78350F' }}>
+                            <span>{studentTranslation.teacherAdvice} ({studentTranslation.providerLabel})</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="unverified-safeguard-card animate-fade-in">
+                          <div className="safeguard-badge-row">
+                            <span className="safeguard-badge">🛡️ सटीकता सुरक्षा (Accuracy Policy)</span>
+                            <span className="demo-mode-tag">Curated Primer Lookup</span>
+                          </div>
+                          <div className="unverified-card-header">
+                            <span className="warning-symbol">⚠️</span>
+                            <div>
+                              <h4>संथाली वाक्य प्राथमिक प्राइमर में उपलब्ध नहीं है (Not in Verified Lexicon)</h4>
+                              <p className="unverified-input-echo">
+                                आपने दर्ज किया: <strong>"{studentSanthaliText}"</strong>
+                              </p>
+                            </div>
+                          </div>
+                          <p className="safeguard-description">
+                            {studentTranslation.teacherAdvice}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -601,10 +948,9 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                       type="button"
                       className="btn-mic-start student-mic-btn"
                       onClick={startStudentListening}
-                      title="Click to speak Santhali words using microphone"
+                      title="Click to speak Santhali words using microphone (language code: sat)"
                     >
-                      <span className="mic-symbol">🎙️</span>
-                      <span>Speak Santhali (संथाली बोलें)</span>
+                      <span>Speak Santhali 🎤</span>
                     </button>
                   )}
                 </div>
@@ -614,12 +960,23 @@ export default function TranslatorSection({ onOpenApiGuide }) {
               {isStudentListening && (
                 <div className="live-listening-banner student-listening-banner animate-fade-in" role="status">
                   <span className="pulsing-record-dot teal-dot"></span>
-                  <strong>Listening now... बच्चा संथाली में बोल सकता है (Speak Santhali)</strong>
+                  <strong>Listening for Santhali (code: "sat")... बच्चा संथाली में बोल सकता है</strong>
                   <div className="mini-sound-waves">
                     <span className="wave-bar w-1"></span>
                     <span className="wave-bar w-2"></span>
                     <span className="wave-bar w-3"></span>
                   </div>
+                </div>
+              )}
+
+              {/* Honest Browser Support Check Notice for 'sat' */}
+              {santhaliSpeechStatus && (
+                <div className="alert-message error-alert animate-fade-in" role="status" style={{ marginBottom: '0.75rem', background: '#FFFBEB', borderColor: '#F59E0B', color: '#92400E' }}>
+                  <span className="alert-icon">ℹ️</span>
+                  <div className="alert-body">
+                    <p>{santhaliSpeechStatus}</p>
+                  </div>
+                  <button type="button" className="btn-alert-dismiss" onClick={() => setSanthaliSpeechStatus('')}>✕</button>
                 </div>
               )}
 
@@ -689,7 +1046,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                   <span>Hindi Translation for Teacher (शिक्षक के लिए हिंदी अनुवाद):</span>
                 </div>
 
-                {studentTranslation && studentTranslation.isVerified && (
+                {studentTranslation && (studentTranslation.isVerified || studentTranslation.isMachineTranslated) && (
                   <button
                     type="button"
                     className={`btn-audio-playback hindi-audio-btn ${isStudentSpeaking ? 'audio-active' : ''}`}
@@ -743,6 +1100,21 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                     <div className="pedagogy-tip-strip student-advice-strip">
                       <span className="tip-star">🤝</span>
                       <span><strong>Teacher Advice:</strong> {studentTranslation.teacherAdvice}</span>
+                    </div>
+                  </div>
+                ) : studentTranslation.isMachineTranslated ? (
+                  <div className="translation-display-card student-result-card animate-fade-in" style={{ borderColor: '#F59E0B', background: '#FFFDF7' }}>
+                    <div className="result-badge-row">
+                      <span className="badge-pill" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B', fontWeight: 700 }}>
+                        ⚠️ Unverified Machine Translation (Prototype)
+                      </span>
+                      <span className="badge-script">Santhali ➔ Hindi (हिंदी)</span>
+                    </div>
+                    <div className="hindi-screen-highlight">
+                      {studentTranslation.hindiTranslation}
+                    </div>
+                    <div className="pedagogy-tip-strip" style={{ background: '#FEF3C7', borderColor: '#FCD34D', color: '#78350F' }}>
+                      <span>{studentTranslation.teacherAdvice} ({studentTranslation.providerLabel})</span>
                     </div>
                   </div>
                 ) : (

@@ -1,7 +1,13 @@
 /**
  * Web Speech Recognition Service for AkhraSiksha AI
- * Handles browser microphone speech-to-text (STT) using Web Speech API (SpeechRecognition / webkitSpeechRecognition).
- * Handles errors gracefully with clear user feedback without inventing fake text.
+ * 
+ * Uses the Web Speech API (SpeechRecognition / webkitSpeechRecognition).
+ * Features:
+ * - Explicit language locale (defaults to 'hi-IN' for Hindi teacher speech).
+ * - Full handling of interim vs final recognition results.
+ * - Extracts alternative candidates (maxAlternatives = 5) to help users spot recognition variants.
+ * - Clear error handling with actionable browser recovery advice.
+ * - Transparent accuracy disclaimer (no false claims of 100% speech accuracy).
  */
 
 export const isSpeechRecognitionSupported = () => {
@@ -9,11 +15,80 @@ export const isSpeechRecognitionSupported = () => {
   return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
 };
 
+/**
+ * Checks whether the current browser natively supports a given language code
+ * (such as 'sat' for Santhali) in Web Speech API.
+ * Standard browsers (Chrome, Edge, Safari) support 'hi-IN' but do NOT currently
+ * bundle a native 'sat' (Santhali) acoustic/language model in Web Speech API.
+ */
+export const checkSanthaliSpeechSupport = async () => {
+  if (!isSpeechRecognitionSupported()) {
+    return {
+      apiSupported: false,
+      satSupported: false,
+      message: 'आपके ब्राउज़र में Web Speech API समर्थित नहीं है (Speech Recognition API is not supported in this browser). कृपया संथाली वाक्य मैन्युअल रूप से टाइप करें।'
+    };
+  }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  // Check W3C SpeechRecognition.available() if implemented by the browser
+  if (typeof SpeechRecognition.available === 'function') {
+    try {
+      const availability = await SpeechRecognition.available({ langs: ['sat', 'sat-IN'] });
+      if (availability === 'available' || availability === 'downloadable') {
+        return {
+          apiSupported: true,
+          satSupported: true,
+          message: 'Santhali (sat) speech recognition is available.'
+        };
+      }
+      return {
+        apiSupported: true,
+        satSupported: false,
+        message: '⚠️ वर्तमान ब्राउज़र संथाली स्पीच रिकग्निशन (भाषा कोड: "sat") का समर्थन नहीं करता है (Your current browser does not support Santhali speech recognition for language code "sat"). आप नीचे दिए गए संथाली टेक्स्ट बॉक्स में मैन्युअल रूप से टाइप या संपादित कर सकते हैं।'
+      };
+    } catch {
+      // Fall through to standard check
+    }
+  }
+
+  // Standard WebKit/Blink SpeechRecognition does not natively support ISO 639-2 'sat'
+  return {
+    apiSupported: true,
+    satSupported: false,
+    message: '⚠️ ब्राउज़र सीमा (Browser Limitation): हमने भाषा कोड "sat" (Santhali) के साथ स्पीच रिकग्निशन का प्रयास किया, लेकिन वर्तमान ब्राउज़र का Web Speech API संथाली ("sat") को मूल रूप से (natively) सपोर्ट नहीं करता है। कृपया नीचे दिए गए बॉक्स में संथाली टेक्स्ट मैन्युअल रूप से टाइप करें या त्वरित वाक्य चुनें।'
+  };
+};
+
+/**
+ * Explicitly requests microphone permission from the browser.
+ * Releases the media stream immediately after permission is verified so SpeechRecognition can use it.
+ */
+export const requestMicrophonePermission = async () => {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    // Let SpeechRecognition.start() handle permission directly if getUserMedia is unavailable
+    return { granted: true };
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Stop tracks right away so SpeechRecognition can take over the microphone cleanly
+    stream.getTracks().forEach((track) => track.stop());
+    return { granted: true };
+  } catch (err) {
+    return {
+      granted: false,
+      error: 'माइक्रोफोन की अनुमति अस्वीकार कर दी गई है। कृपया ब्राउज़र में एड्रेस बार के पास लॉक (🔒) आइकन पर क्लिक करके माइक की अनुमति दें (Microphone permission was denied. Please allow microphone access in browser settings).'
+    };
+  }
+};
+
 export class ClassroomSpeechRecognizer {
   constructor() {
     this.recognition = null;
     this.isListening = false;
-    this.currentMode = null; // 'teacher' (hi-IN) or 'student' (sat / hi-IN fallback)
+    this.currentMode = null;
   }
 
   start({
@@ -25,11 +100,11 @@ export class ClassroomSpeechRecognizer {
     onEnd = () => {}
   }) {
     if (!isSpeechRecognitionSupported()) {
-      onError('आपके ब्राउज़र में स्पीच रिकग्निशन (माइक इनपुट) समर्थित नहीं है। कृपया Google Chrome या Edge का उपयोग करें (Speech Recognition is not supported in this browser. Please use Chrome or Edge).');
+      onError('आपके ब्राउज़र में स्पीच रिकग्निशन (माइक इनपुट) समर्थित नहीं है। कृपया Google Chrome या Microsoft Edge का उपयोग करें, या मैन्युअल रूप से टेक्स्ट टाइप करें (Speech Recognition is not supported in this browser).');
       return false;
     }
 
-    // Stop any existing recognition
+    // Stop any active recognition session before starting a new one
     this.stop();
 
     try {
@@ -37,10 +112,14 @@ export class ClassroomSpeechRecognizer {
       this.recognition = new SpeechRecognition();
       this.currentMode = mode;
 
+      // Explicitly set the requested language code ('hi-IN' for Hindi, 'sat' for Santhali)
+      const requestedLang = lang || 'hi-IN';
+      this.recognition.lang = requestedLang;
       this.recognition.continuous = false;
       this.recognition.interimResults = true;
-      this.recognition.maxAlternatives = 1;
-      this.recognition.lang = lang;
+      this.recognition.maxAlternatives = 5;
+
+      let hasReceivedResult = false;
 
       this.recognition.onstart = () => {
         this.isListening = true;
@@ -50,20 +129,42 @@ export class ClassroomSpeechRecognizer {
       this.recognition.onresult = (event) => {
         let interimTranscript = '';
         let finalTranscript = '';
+        const alternatives = [];
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript;
+        for (let i = 0; i < event.results.length; ++i) {
+          const res = event.results[i];
+          if (res.isFinal) {
+            finalTranscript += res[0].transcript;
           } else {
-            interimTranscript += transcript;
+            interimTranscript += res[0].transcript;
           }
+
+          // Capture top alternatives from the latest segment
+          if (i === event.results.length - 1) {
+            for (let j = 0; j < res.length; j++) {
+              const alt = res[j];
+              if (alt?.transcript) {
+                alternatives.push({
+                  transcript: alt.transcript.trim(),
+                  confidence: alt.confidence || 0
+                });
+              }
+            }
+          }
+        }
+
+        const rawText = (finalTranscript || interimTranscript).trim();
+        if (rawText) {
+          hasReceivedResult = true;
         }
 
         onResult({
           finalTranscript: finalTranscript.trim(),
           interimTranscript: interimTranscript.trim(),
-          rawText: (finalTranscript || interimTranscript).trim()
+          rawText,
+          isFinal: Boolean(finalTranscript),
+          alternatives,
+          langUsed: requestedLang
         });
       };
 
@@ -72,21 +173,40 @@ export class ClassroomSpeechRecognizer {
         let userMessage = 'माइक्रोफोन त्रुटि हुई (Microphone error occurred).';
 
         switch (event.error) {
+          case 'language-not-supported':
+          case 'bad-grammar':
+            if (requestedLang === 'sat' || requestedLang.startsWith('sat')) {
+              userMessage = '⚠️ वर्तमान ब्राउज़र संथाली स्पीच रिकग्निशन (भाषा कोड: "sat") का समर्थन नहीं करता है (Your browser does not support Santhali speech recognition with language code "sat"). कृपया नीचे दिए गए संथाली इनपुट बॉक्स में मैन्युअल रूप से टाइप करें या त्वरित संथाली वाक्य चुनें।';
+            } else {
+              userMessage = `यह भाषा कोड (${requestedLang}) आपके ब्राउज़र के स्पीच रिकग्निशन में समर्थित नहीं है (Language "${requestedLang}" is not supported by your browser).`;
+            }
+            break;
           case 'not-allowed':
           case 'service-not-allowed':
-            userMessage = 'माइक्रोफोन की अनुमति अस्वीकार कर दी गई है। कृपया ब्राउज़र में माइक की अनुमति दें (Microphone permission was denied. Please allow microphone access in browser settings).';
+            userMessage = 'माइक्रोफोन की अनुमति अस्वीकार कर दी गई है। कृपया ब्राउज़र में एड्रेस बार के पास लॉक (🔒) आइकन पर क्लिक करके माइक की अनुमति दें (Microphone permission was denied. Please allow microphone access in browser settings).';
             break;
           case 'no-speech':
-            userMessage = 'कोई आवाज़ सुनाई नहीं दी। कृपया माइक के पास साफ़ आवाज़ में बोलें (No speech detected. Please speak clearly near the microphone).';
+            if (requestedLang === 'sat' || requestedLang.startsWith('sat')) {
+              userMessage = '⚠️ संथाली ("sat") में कोई आवाज़ पहचानी नहीं जा सकी क्योंकि वर्तमान ब्राउज़र संथाली स्पीच रिकग्निशन ("sat") का मूल रूप से समर्थन नहीं करता है (Browser does not natively support Santhali "sat" speech recognition). कृपया नीचे दिए गए संथाली टेक्स्ट बॉक्स में मैन्युअल रूप से टाइप करें।';
+            } else {
+              userMessage = 'कोई आवाज़ सुनाई नहीं दी। कृपया माइक के पास साफ़ आवाज़ में बोलें (No speech detected. Please speak clearly near the microphone).';
+            }
             break;
           case 'audio-capture':
-            userMessage = 'कोई माइक्रोफोन डिवाइस नहीं मिला (No microphone hardware found).';
+            userMessage = 'कोई माइक्रोफोन डिवाइस नहीं मिला। कृपया जांचें कि माइक जुड़ा हुआ है (No microphone hardware found).';
             break;
           case 'network':
-            userMessage = 'स्पीच रिकग्निशन के लिए इंटरनेट कनेक्शन आवश्यक है (Network error occurred during speech recognition).';
+            userMessage = 'स्पीच रिकग्निशन के लिए इंटरनेट कनेक्शन आवश्यक है (Network error: Speech service requires active internet connection).';
             break;
+          case 'aborted':
+            // User manually stopped listening
+            return;
           default:
-            userMessage = `स्पीच रिकग्निशन में समस्या आई: ${event.error}`;
+            if (requestedLang === 'sat' || requestedLang.startsWith('sat')) {
+              userMessage = `⚠️ संथाली स्पीच रिकग्निशन (कोड: "sat") इस ब्राउज़र में समर्थित नहीं है (${event.error}). कृपया संथाली वाक्य मैन्युअल रूप से टाइप करें।`;
+            } else {
+              userMessage = `स्पीच रिकग्निशन में समस्या आई: ${event.error}`;
+            }
         }
 
         onError(userMessage);
@@ -94,7 +214,7 @@ export class ClassroomSpeechRecognizer {
 
       this.recognition.onend = () => {
         this.isListening = false;
-        onEnd();
+        onEnd({ hasReceivedResult, langUsed: requestedLang });
       };
 
       this.recognition.start();

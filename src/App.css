@@ -2765,6 +2765,53 @@
   box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);
 }
 
+/* Textarea Actions Group (Play Hindi Audio + Translate buttons side-by-side) */
+.textarea-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Small Audio Button (for inline "Play Hindi Audio" in teacher input box) */
+.btn-audio-small {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #2563EB;
+  color: #FFFFFF;
+  border-radius: var(--radius-md);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.3);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  border: none;
+}
+
+.btn-audio-small:hover {
+  background: #1D4ED8;
+  transform: translateY(-1px);
+}
+
+.btn-audio-small.hindi-audio-btn {
+  background: #2563EB;
+}
+
+.btn-audio-small.hindi-audio-btn:hover {
+  background: #1E40AF;
+}
+
+.btn-audio-small.audio-active {
+  background: #DC2626;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);
+}
+
+.btn-audio-small .audio-icon {
+  font-size: 0.9rem;
+}
+
 /* Translation Display Card */
 .translation-display-card {
   background: #FFFFFF;
