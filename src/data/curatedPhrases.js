@@ -371,12 +371,213 @@ export const CURATED_STUDENT_SANTHALI_PHRASES = [
 ];
 
 export const STUDENT_SAMPLE_PROMPTS = [
-  { label: '🙏 Johar Machet (नमस्ते)', text: 'Johar machet' },
-  { label: '💧 Dah ñuyan (पानी पीना है)', text: 'Dah ñuyan machet' },
-  { label: '❓ Bañ bujhaw (समझ नहीं आया)', text: 'Iñ bañ bujhaw daṛeyada' },
-  { label: '📖 Puthi banug-a (किताब नहीं है)', text: 'Iñag puthi banug-a' },
-  { label: '🚶 Bahre senog-añ (बाहर जाऊं?)', text: 'Bahre senog-añ machet?' },
-  { label: '✅ Hẽ bujhaw kedañ (समझ गया)', text: 'Hẽ machet, bujhaw kedañ' },
-  { label: '✏️ Ol kedañ (लिख लिया)', text: 'Iñ ol kedañ machet' },
-  { label: '🔁 Arhõ middhaw (दोहराएं)', text: 'Arhõ middhaw lạymey' }
+  { label: '🙏 ᱡᱚᱦᱟᱨ ᱢᱟᱪᱮᱛ (नमस्ते)', text: 'ᱡᱚᱦᱟᱨ ᱢᱟᱪᱮᱛ', roman: 'Johar machet' },
+  { label: '💧 ᱫᱟᱜ ᱧᱩᱭᱟᱹᱧ (पानी पीना है)', text: 'ᱫᱟᱜ ᱧᱩᱭᱟᱹᱧ ᱢᱟᱪᱮᱛ', roman: 'Dah ñuyan machet' },
+  { label: '📖 ᱯᱩᱛᱷᱤ ᱵᱟᱹᱱᱩᱜᱼᱟ (किताब नहीं है)', text: 'ᱤᱧᱟᱜ ᱯᱩᱛᱷᱤ ᱵᱟᱹᱱᱩᱜᱼᱟ', roman: 'Iñag puthi banug-a' },
+  { label: '❓ ᱵᱟᱹᱧ ᱵᱩᱡᱷᱟᱹᱣ (समझ नहीं आया)', text: 'ᱤᱧ ᱵᱟᱹᱧ ᱵᱩᱡᱷᱟᱹᱣ ᱫᱟᱲᱮᱭᱟᱫᱼᱟ', roman: 'Iñ bañ bujhaw daṛeyada' },
+  { label: '🚶 ᱵᱟᱦᱨᱮ ᱥᱮᱱᱚᱜ (बाहर जाऊं?)', text: 'ᱵᱟᱦᱨᱮ ᱥᱮᱱᱚᱜᱼᱟᱹᱧ ᱢᱟᱪᱮᱛ?', roman: 'Bahre senog-añ machet?' },
+  { label: '✅ ᱵᱩᱡᱷᱟᱹᱣ ᱠᱮᱫᱟᱹᱧ (समझ गया)', text: 'ᱦᱮᱸ ᱢᱟᱪᱮᱛ, ᱵᱩᱡᱷᱟᱹᱣ ᱠᱮᱫᱟᱹᱧ', roman: 'Hẽ machet, bujhaw kedañ' },
+  { label: '✏️ ᱚᱞ ᱠᱮᱫᱟᱹᱧ (लिख लिया)', text: 'ᱤᱧ ᱚᱞ ᱠᱮᱫᱟᱹᱧ ᱢᱟᱪᱮᱛ', roman: 'Iñ ol kedañ machet' },
+  { label: '🔁 ᱟᱨᱦᱚᱸ ᱞᱟᱹᱭ (दोहराएं)', text: 'ᱟᱨᱦᱚᱸ ᱢᱤᱫᱫᱷᱟᱣ ᱞᱟᱹᱭ ᱢᱮ', roman: 'Arhõ middhaw lạymey' }
+];
+
+export const CURATED_SANTHALI_VOCABULARY = [
+  {
+    id: 'vocab-puthi',
+    category: 'Classroom Materials',
+    santhaliOlChiki: 'ᱯᱩᱛᱷᱤ',
+    santhaliRoman: 'Puthi',
+    santhaliDevanagari: 'पुथी',
+    hindi: 'किताब / पुस्तक',
+    english: 'Book / Reading Primer',
+    teacherAdvice: 'संथाली में पुस्तक या पाठ्यपुस्तक को "पुथी" (Puthi) कहते हैं।',
+    validVariants: ['puthi', 'ᱯᱩᱛᱷᱤ', 'पुथी', 'pothi', 'pustak', 'kitab']
+  },
+  {
+    id: 'vocab-johar',
+    category: 'Greetings',
+    santhaliOlChiki: 'ᱡᱚᱦᱟᱨ',
+    santhaliRoman: 'Johar',
+    santhaliDevanagari: 'जोहार',
+    hindi: 'नमस्ते / प्रणाम / अभिवादन',
+    english: 'Greetings / Respectful Hello',
+    teacherAdvice: 'संथाल समाज का पारंपरिक और आदरसूचक अभिवादन शब्द।',
+    validVariants: ['johar', 'ᱡᱚᱦᱟᱨ', 'जोहार', 'जोहर', 'namaste']
+  },
+  {
+    id: 'vocab-machet',
+    category: 'People',
+    santhaliOlChiki: 'ᱢᱟᱪᱮᱛ',
+    santhaliRoman: 'Machet',
+    santhaliDevanagari: 'माचेत',
+    hindi: 'शिक्षक / गुरुजी / अध्यापक',
+    english: 'Teacher / Educator',
+    teacherAdvice: 'संथाली भाषा में शिक्षक को "माचेत" (Machet) कहा जाता है।',
+    validVariants: ['machet', 'ᱢᱟᱪᱮᱛ', 'माचेत', 'मचेत', 'guru ji', 'master']
+  },
+  {
+    id: 'vocab-gidra',
+    category: 'People',
+    santhaliOlChiki: 'ᱜᱤᱫᱽᱨᱟᱹ',
+    santhaliRoman: 'Gidra',
+    santhaliDevanagari: 'गिदरा',
+    hindi: 'बच्चा / बालक',
+    english: 'Child / Student',
+    teacherAdvice: '"गिदरा" का अर्थ बच्चा होता है; बहुवचन में "गिदरा को" (बच्चे) कहा जाता है।',
+    validVariants: ['gidra', 'ᱜᱤᱫᱽᱨᱟᱹ', 'गिदरा', 'gidra ko', 'गिदरा को']
+  },
+  {
+    id: 'vocab-dah',
+    category: 'Daily Needs',
+    santhaliOlChiki: 'ᱫᱟᱜ',
+    santhaliRoman: 'Dah',
+    santhaliDevanagari: 'दाह / दाग',
+    hindi: 'पानी / जल',
+    english: 'Water',
+    teacherAdvice: '"दाग" (Dah) संथाली में पानी के लिए प्रयुक्त मुख्य शब्द है।',
+    validVariants: ['dah', 'daag', 'ᱫᱟᱜ', 'दाह', 'दाग', 'pani']
+  },
+  {
+    id: 'vocab-kolom',
+    category: 'Classroom Materials',
+    santhaliOlChiki: 'ᱠᱚᱞᱚᱢ',
+    santhaliRoman: 'Kolom',
+    santhaliDevanagari: 'कोलम',
+    hindi: 'कलम / पेन',
+    english: 'Pen / Writing Tool',
+    teacherAdvice: 'लिखने की कलम या पेन।',
+    validVariants: ['kolom', 'ᱠᱚᱞᱚᱢ', 'कोलम', 'कलम', 'pen']
+  },
+  {
+    id: 'vocab-ol',
+    category: 'Learning Activities',
+    santhaliOlChiki: 'ᱚᱞ',
+    santhaliRoman: 'Ol',
+    santhaliDevanagari: 'ओल',
+    hindi: 'लिखना / लिखाई',
+    english: 'To write / Script',
+    teacherAdvice: '"ओल" का अर्थ लिखना होता है, जैसे "ओल चिकी" (लिखने की लिपि)।',
+    validVariants: ['ol', 'ᱚᱞ', 'ओल', 'ol kedañ', 'writing']
+  },
+  {
+    id: 'vocab-parao',
+    category: 'Learning Activities',
+    santhaliOlChiki: 'ᱯᱟᱲᱦᱟᱣ',
+    santhaliRoman: 'Parao',
+    santhaliDevanagari: 'पाड़हाव',
+    hindi: 'पढ़ना / पढ़ाई',
+    english: 'To read / Study',
+    teacherAdvice: 'कक्षा में पाठ पढ़ना या अभ्यास करना।',
+    validVariants: ['parao', 'padhao', 'ᱯᱟᱲᱦᱟᱣ', 'पाड़हाव', 'padhna']
+  },
+  {
+    id: 'vocab-he',
+    category: 'Responses',
+    santhaliOlChiki: 'ᱦᱮᱸ',
+    santhaliRoman: 'Hẽ',
+    santhaliDevanagari: 'हें',
+    hindi: 'हाँ / ठीक है',
+    english: 'Yes',
+    teacherAdvice: 'सहमति या स्वीकृतिसूचक शब्द।',
+    validVariants: ['he', 'hẽ', 'ᱦᱮᱸ', 'हें', 'हे', 'हाँ', 'yes']
+  },
+  {
+    id: 'vocab-bang',
+    category: 'Responses',
+    santhaliOlChiki: 'ᱵᱟᱝ',
+    santhaliRoman: 'Bang',
+    santhaliDevanagari: 'बां / बांग',
+    hindi: 'नहीं / मत',
+    english: 'No / Not',
+    teacherAdvice: 'नकार या मना करने वाला शब्द।',
+    validVariants: ['bang', 'bañ', 'ᱵᱟᱝ', 'बां', 'बांग', 'नहीं', 'no']
+  },
+  {
+    id: 'vocab-daka',
+    category: 'Daily Needs',
+    santhaliOlChiki: 'ᱫᱟᱠᱟ',
+    santhaliRoman: 'Daka',
+    santhaliDevanagari: 'दाका',
+    hindi: 'भात / भोजन / खाना',
+    english: 'Food / Rice / Meal',
+    teacherAdvice: 'भोजन या मिड-डे मील।',
+    validVariants: ['daka', 'ᱫᱟᱠᱟ', 'दाका', 'khana', 'bhojan']
+  },
+  {
+    id: 'vocab-sarhaw',
+    category: 'Encouragement',
+    santhaliOlChiki: 'ᱥᱟᱨᱦᱟᱣ',
+    santhaliRoman: 'Sarhaw',
+    santhaliDevanagari: 'सारहाव',
+    hindi: 'शाबाश / धन्यवाद / बधाई',
+    english: 'Well done / Congratulations / Thanks',
+    teacherAdvice: 'बच्चे के प्रयास की सराहना करने के लिए प्रयोग करें।',
+    validVariants: ['sarhaw', 'ᱥᱟᱨᱦᱟᱣ', 'सारहाव', 'shabash', 'dhanyawad']
+  },
+  {
+    id: 'vocab-bahre',
+    category: 'Permission',
+    santhaliOlChiki: 'ᱵᱟᱦᱨᱮ',
+    santhaliRoman: 'Bahre',
+    santhaliDevanagari: 'बाहरे',
+    hindi: 'बाहर',
+    english: 'Outside',
+    teacherAdvice: 'कक्षा से बाहर जाने से संबंधित शब्द।',
+    validVariants: ['bahre', 'ᱵᱟᱦᱨᱮ', 'बाहरे', 'bahar']
+  },
+  {
+    id: 'vocab-mit',
+    category: 'Numbers',
+    santhaliOlChiki: 'ᱢᱤᱫ',
+    santhaliRoman: 'Mit',
+    santhaliDevanagari: 'मिद',
+    hindi: 'एक (1)',
+    english: 'One (1)',
+    teacherAdvice: 'संथाली संख्या: एक।',
+    validVariants: ['mit', 'mid', 'ᱢᱤᱫ', 'मिद', '1', 'one']
+  },
+  {
+    id: 'vocab-bar',
+    category: 'Numbers',
+    santhaliOlChiki: 'ᱵᱟᱨ',
+    santhaliRoman: 'Bar',
+    santhaliDevanagari: 'बार',
+    hindi: 'दो (2)',
+    english: 'Two (2)',
+    teacherAdvice: 'संथाली संख्या: दो।',
+    validVariants: ['bar', 'ᱵᱟᱨ', 'बार', '2', 'two']
+  },
+  {
+    id: 'vocab-pe',
+    category: 'Numbers',
+    santhaliOlChiki: 'ᱯᱮ',
+    santhaliRoman: 'Pe',
+    santhaliDevanagari: 'पे',
+    hindi: 'तीन (3)',
+    english: 'Three (3)',
+    teacherAdvice: 'संथाली संख्या: तीन।',
+    validVariants: ['pe', 'ᱯᱮ', 'पे', '3', 'three']
+  },
+  {
+    id: 'vocab-pon',
+    category: 'Numbers',
+    santhaliOlChiki: 'ᱯᱩᱱ',
+    santhaliRoman: 'Pon',
+    santhaliDevanagari: 'पून',
+    hindi: 'चार (4)',
+    english: 'Four (4)',
+    teacherAdvice: 'संथाली संख्या: चार।',
+    validVariants: ['pon', 'pun', 'ᱯᱩᱱ', 'पून', '4', 'four']
+  },
+  {
+    id: 'vocab-more',
+    category: 'Numbers',
+    santhaliOlChiki: 'ᱢᱚᱬᱮ',
+    santhaliRoman: 'More',
+    santhaliDevanagari: 'मोणे',
+    hindi: 'पाँच (5)',
+    english: 'Five (5)',
+    teacherAdvice: 'संथाली संख्या: पाँच।',
+    validVariants: ['more', 'mone', 'ᱢᱚᱬᱮ', 'मोणे', '5', 'five']
+  }
 ];

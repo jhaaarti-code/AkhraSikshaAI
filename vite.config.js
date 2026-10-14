@@ -1,16 +1,20 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { createTranslateMiddleware } from './server/translateApi.js';
+import { createTranscribeMiddleware } from './server/transcribeApi.js';
 
 function akhraTranslateBackendPlugin() {
-  const middleware = createTranslateMiddleware();
+  const translateMiddleware = createTranslateMiddleware();
+  const transcribeMiddleware = createTranscribeMiddleware();
   return {
     name: 'akhra-translate-backend',
     configureServer(server) {
-      server.middlewares.use(middleware);
+      server.middlewares.use(translateMiddleware);
+      server.middlewares.use(transcribeMiddleware);
     },
     configurePreviewServer(server) {
-      server.middlewares.use(middleware);
+      server.middlewares.use(translateMiddleware);
+      server.middlewares.use(transcribeMiddleware);
     }
   };
 }

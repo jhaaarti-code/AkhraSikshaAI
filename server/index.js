@@ -8,9 +8,11 @@
 
 import http from 'node:http';
 import { createTranslateMiddleware } from './translateApi.js';
+import { createTranscribeMiddleware } from './transcribeApi.js';
 
 const PORT = process.env.PORT || 3001;
 const translateMiddleware = createTranslateMiddleware();
+const transcribeMiddleware = createTranscribeMiddleware();
 
 const server = http.createServer((req, res) => {
   // Basic CORS headers for local frontend development
@@ -25,12 +27,14 @@ const server = http.createServer((req, res) => {
   }
 
   translateMiddleware(req, res, () => {
-    res.statusCode = 404;
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify({ ok: false, message: 'Endpoint not found. Use POST /api/translate.' }));
+    transcribeMiddleware(req, res, () => {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ ok: false, message: 'Endpoint not found. Use POST /api/translate or POST /api/transcribe.' }));
+    });
   });
 });
 
 server.listen(PORT, () => {
-  console.log(`AkhraSiksha AI Backend running at http://localhost:${PORT}/api/translate`);
+  console.log(`AkhraSiksha AI Backend running at http://localhost:${PORT}/api/translate & /api/transcribe`);
 });

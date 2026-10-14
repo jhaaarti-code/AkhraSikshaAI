@@ -1,5 +1,10 @@
-import { CURATED_CLASSROOM_PHRASES, CURATED_STUDENT_SANTHALI_PHRASES } from '../data/curatedPhrases.js';
-import { containsOlChikiScript } from '../utils/olChikiTransliterator.js';
+import { 
+  CURATED_CLASSROOM_PHRASES, 
+  CURATED_STUDENT_SANTHALI_PHRASES,
+  CURATED_SANTHALI_VOCABULARY
+} from '../data/curatedPhrases.js';
+import { containsOlChikiScript, generateOlChikiPronunciationApproximation } from '../utils/olChikiTransliterator.js';
+import { matchSanthaliSpeech } from '../utils/santhaliSpeechMatcher.js';
 
 /**
  * Normalizes text for reliable semantic comparison:
@@ -258,7 +263,15 @@ export const translateSanthaliToHindi = async ({
     const normOlChiki = (phrase.santhaliOlChiki || '').trim();
     const normDev = (phrase.santhaliDevanagari || '').trim();
 
-    return normalizedInput === normRoman || trimmed === normOlChiki || trimmed === normDev;
+    if (normalizedInput === normRoman || trimmed === normOlChiki || trimmed === normDev) {
+      return true;
+    }
+
+    if (phrase.validVariants && phrase.validVariants.length > 0) {
+      return phrase.validVariants.some(v => normalizeText(v) === normalizedInput || v === trimmed);
+    }
+
+    return false;
   });
 
   if (matchedGeneral) {
@@ -278,48 +291,128 @@ export const translateSanthaliToHindi = async ({
     };
   }
 
-  // 3. If the Santhali input is written in Ol Chiki script, try `/api/translate` (sat -> hi)
-  if (containsOlChikiScript(trimmed)) {
-    const apiResult = await callBackendTranslateApi({
+  // 3. Match in authentic Santhali classroom vocabulary (e.g. Puthi, Johar, Machet, Dah, Gidra, Ol, Numbers)
+  let matchedVocab = CURATED_SANTHALI_VOCABULARY.find(item => {
+    const normRoman = normalizeText(item.santhaliRoman);
+    const normOlChiki = (item.santhaliOlChiki || '').trim();
+    const normDev = (item.santhaliDevanagari || '').trim();
+
+    if (normalizedInput === normRoman || trimmed === normOlChiki || trimmed === normDev) {
+      return true;
+    }
+
+    if (item.validVariants && item.validVariants.length > 0) {
+      return item.validVariants.some(v => normalizeText(v) === normalizedInput || v === trimmed);
+    }
+
+    return false;
+  });
+
+  if (matchedVocab) {
+    return {
+      status: 'VERIFIED_VOCABULARY_MATCH',
+      isVerified: true,
+      isMachineTranslated: false,
+      santhaliInput: trimmed,
+      santhaliOlChiki: matchedVocab.santhaliOlChiki,
+      santhaliRoman: matchedVocab.santhaliRoman,
+      santhaliDevanagari: matchedVocab.santhaliDevanagari,
+      hindiTranslation: matchedVocab.hindi,
+      englishMeaning: matchedVocab.english,
+      teacherAdvice: matchedVocab.teacherAdvice,
+      category: matchedVocab.category,
+      verificationBadge: 'Verified Santhali Lexicon'
+    };
+  }
+
+  // 4. Phonetic match using Santhali Speech Matcher
+  const phoneticMatch = matchSanthaliSpeech(trimmed);
+  if (phoneticMatch && phoneticMatch.matched && phoneticMatch.phrase && phoneticMatch.confidence >= 0.85) {
+    const p = phoneticMatch.phrase;
+    return {
+      status: 'VERIFIED_PHONETIC_MATCH',
+      isVerified: true,
+      isMachineTranslated: false,
+      santhaliInput: trimmed,
+      santhaliOlChiki: p.santhaliOlChiki || phoneticMatch.santhaliOlChiki,
+      santhaliRoman: p.santhaliRoman || phoneticMatch.santhaliRoman,
+      santhaliDevanagari: p.santhaliDevanagari || phoneticMatch.santhaliDevanagari,
+      hindiTranslation: p.hindi || 'सत्यापित संथाली शब्द',
+      englishMeaning: p.english || null,
+      teacherAdvice: p.teacherAdvice || p.teacherTip || 'सत्यापित संथाली प्राइमर से सुमेलित।',
+      category: p.category || 'Classroom Vocabulary',
+      verificationBadge: 'Verified Santhali Lexicon'
+    };
+  }
+
+  // 5. Machine Translation via /api/translate (sat -> hi)
+  // Supports BOTH Roman Santhali (e.g. "Puthi", "Johar") AND Ol Chiki script (e.g. "ᱯᱩᱛᱷᱤ")
+  const olChikiPayload = phoneticMatch?.santhaliOlChiki || (containsOlChikiScript(trimmed) ? trimmed : null);
+
+  const apiResult = await callBackendTranslateApi({
+    text: olChikiPayload || trimmed,
+    sourceLang: 'sat',
+    targetLang: 'hi'
+  });
+
+  if (apiResult.ok && apiResult.data?.hindiTranslation) {
+    return {
+      status: 'MACHINE_TRANSLATED_UNVERIFIED',
+      isVerified: false,
+      isMachineTranslated: true,
+      santhaliInput: trimmed,
+      santhaliOlChiki: olChikiPayload || trimmed,
+      santhaliRoman: phoneticMatch?.santhaliRoman || trimmed,
+      hindiTranslation: apiResult.data.hindiTranslation,
+      englishMeaning: null,
+      providerLabel:
+        apiResult.data.providerLabel ||
+        'Santhali Machine Translation Engine',
+      teacherAdvice:
+        apiResult.data.accuracyDisclaimer ||
+        '⚠️ यह मशीन द्वारा जनित हिंदी अनुवाद है।',
+      verificationBadge: 'Machine Translation (Santhali ➔ Hindi)'
+    };
+  }
+
+  // If primary translation failed with Ol Chiki, also try direct text if different
+  if (olChikiPayload && olChikiPayload !== trimmed) {
+    const directResult = await callBackendTranslateApi({
       text: trimmed,
       sourceLang: 'sat',
       targetLang: 'hi'
     });
 
-    if (apiResult.ok && apiResult.data?.hindiTranslation) {
+    if (directResult.ok && directResult.data?.hindiTranslation) {
       return {
         status: 'MACHINE_TRANSLATED_UNVERIFIED',
         isVerified: false,
         isMachineTranslated: true,
         santhaliInput: trimmed,
-        santhaliOlChiki: trimmed,
-        santhaliRoman: null,
-        hindiTranslation: apiResult.data.hindiTranslation,
+        santhaliOlChiki: olChikiPayload,
+        santhaliRoman: trimmed,
+        hindiTranslation: directResult.data.hindiTranslation,
         englishMeaning: null,
-        providerLabel:
-          apiResult.data.providerLabel ||
-          'Unofficial Google Translate Web Endpoint (Prototype Demo — Not an official Google Cloud API)',
-        teacherAdvice:
-          apiResult.data.accuracyDisclaimer ||
-          '⚠️ यह मशीन द्वारा जनित अपुष्ट (Unverified) हिंदी अनुवाद है। यह एक अनधिकृत वेब एंडपॉइंट से प्राप्त किया गया है।',
-        verificationBadge: 'Unverified Machine Translation (Prototype)'
+        providerLabel: directResult.data.providerLabel || 'Santhali Machine Translation Engine',
+        teacherAdvice: directResult.data.accuracyDisclaimer || '⚠️ यह मशीन द्वारा जनित हिंदी अनुवाद है।',
+        verificationBadge: 'Machine Translation (Santhali ➔ Hindi)'
       };
     }
   }
 
-  // 4. Honest unverified fallback: Do NOT display an unrelated translation!
+  // 6. Final honest fallback if offline / network unreachable
   return {
     status: 'NOT_IN_CURATED_PRIMER',
     isVerified: false,
     isMachineTranslated: false,
     santhaliInput: trimmed,
-    santhaliOlChiki: trimmed,
+    santhaliOlChiki: olChikiPayload || trimmed,
     santhaliRoman: trimmed,
     hindiTranslation: null,
     englishMeaning: null,
-    message: `संथाली वाक्य प्राथमिक प्राइमर में उपलब्ध नहीं है: "${trimmed}"`,
-    teacherAdvice: 'यह संथाली वाक्य सत्यापित छात्र प्राइमर सूची में नहीं मिला। मनगढ़ंत या गलत अनुवाद से बचने के लिए, कृपया नीचे दिए गए सत्यापित छात्र वाक्यों में से चुनें या ओल चिकी (Ol Chiki) लिपि में संथाली वाक्य दर्ज करें।',
-    demoNotice: 'Notice: This Roman/Devanagari Santhali phrase is not in the verified student primer.',
+    message: `संथाली वाक्य का अनुवाद उपलब्ध नहीं हो सका: "${trimmed}"`,
+    teacherAdvice: 'यह संथाली वाक्य सत्यापित प्राइमर सूची में नहीं मिला और ऑनलाइन अनुवाद सेवा उपलब्ध नहीं थी। कृपया नेटवर्क कनेक्शन जांचें या नीचे दिए गए सत्यापित वाक्यों में से चुनें।',
+    demoNotice: 'Notice: Could not connect to translation service. Curated phrases remain available below.',
     suggestedPhrases: CURATED_STUDENT_SANTHALI_PHRASES.slice(0, 4)
   };
 };

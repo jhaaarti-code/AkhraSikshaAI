@@ -101,13 +101,18 @@ async function translateWithIndicTrans({ hindiSentence, targetLang = "sat" }) {
           <div className="provider-options-grid">
             <div className="provider-card">
               <h4>🇮🇳 Project Bhashini (Digital India)</h4>
-              <p>National Language Translation Mission initiative supporting tribal and scheduled Indian languages including Santhali.</p>
+              <p>National Language Translation Mission initiative supporting tribal and scheduled Indian languages including Santhali ASR and NMT.</p>
               <span className="tag-free">Govt Open API</span>
             </div>
             <div className="provider-card">
               <h4>🧠 AI4Bharat (IIT Madras)</h4>
-              <p>State-of-the-art open-source <strong>IndicTrans2</strong> transformer models specifically fine-tuned on Indic corpora.</p>
+              <p>State-of-the-art open-source <strong>IndicTrans2</strong> and <strong>IndicConformer ASR</strong> fine-tuned on Indic & tribal speech corpora.</p>
               <span className="tag-free">Open Source Model</span>
+            </div>
+            <div className="provider-card" style={{ gridColumn: 'span 2' }}>
+              <h4>🎙️ Universal Santhali Speech Engine (/api/transcribe)</h4>
+              <p>Cross-browser hybrid speech recognition: captures audio via W3C <code>MediaRecorder</code> in any browser (Chrome, Firefox, Safari, Edge, Android, iOS) with acoustic-phonetic alignment to verified Santhali Ol Chiki and Roman vocabulary.</p>
+              <span className="tag-free" style={{ background: '#ECFDF5', color: '#065F46', border: '1px solid #10B981' }}>Cross-Browser Ready</span>
             </div>
           </div>
 

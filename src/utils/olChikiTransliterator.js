@@ -51,9 +51,9 @@ const OL_CHIKI_CHAR_MAP = {
   '\u1C59': { roman: '9', deva: '९', type: 'digit' },
 
   // Vowels
-  'ᱚ': { roman: 'o', deva: 'अ', matra: '', type: 'vowel' },
+  'ᱚ': { roman: 'o', deva: 'ओ', matra: 'ो', type: 'vowel' },
   'ᱟ': { roman: 'a', deva: 'आ', matra: 'ा', type: 'vowel' },
-  'ᱤ': { roman: 'i', deva: 'इ', matra: 'ि', type: 'vowel' },
+  'ᱤ': { roman: 'i', deva: 'इ', matra: 'ी', type: 'vowel' },
   'ᱩ': { roman: 'u', deva: 'उ', matra: 'ु', type: 'vowel' },
   'ᱮ': { roman: 'e', deva: 'ए', matra: 'े', type: 'vowel' },
   'ᱳ': { roman: 'o', deva: 'ओ', matra: 'ो', type: 'vowel' },
@@ -89,7 +89,7 @@ const OL_CHIKI_CHAR_MAP = {
   'ᱹ': { roman: 'ạ', deva: 'ा', type: 'vowel_modifier' },
   'ᱺ': { roman: 'ạ̃', deva: 'ां', type: 'vowel_modifier' },
   'ᱻ': { roman: '', deva: '', type: 'modifier' },
-  'ᱼ': { roman: '-', deva: '-', type: 'punct' },
+  'ᱼ': { roman: '', deva: '', type: 'punct' },
   'ᱽ': { roman: '', deva: '्', type: 'ahad' },
   '᱾': { roman: '.', deva: '।', type: 'punct' },
   '᱿': { roman: '.', deva: '॥', type: 'punct' }
