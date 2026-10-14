@@ -53,11 +53,11 @@ export const checkSanthaliSpeechSupport = async () => {
     }
   }
 
-  // Standard WebKit/Blink SpeechRecognition does not natively support ISO 639-2 'sat'
+  // Standard WebKit/Blink SpeechRecognition does not natively support ISO 639-2/3 'sat'
   return {
     apiSupported: true,
     satSupported: false,
-    message: '⚠️ ब्राउज़र सीमा (Browser Limitation): हमने भाषा कोड "sat" (Santhali) के साथ स्पीच रिकग्निशन का प्रयास किया, लेकिन वर्तमान ब्राउज़र का Web Speech API संथाली ("sat") को मूल रूप से (natively) सपोर्ट नहीं करता है। कृपया नीचे दिए गए बॉक्स में संथाली टेक्स्ट मैन्युअल रूप से टाइप करें या त्वरित वाक्य चुनें।'
+    message: '⚠️ Browser Limitation: Android Chrome and standard browsers do not currently support Santhali speech recognition (language code "sat") because speech engines lack an acoustic model for Santhali. To prevent incorrect English or Hindi guesses from overwriting your text, microphone recognition is paused for Santhali. Please select from the verified classroom quick prompts below or type Romanized Santhali (e.g. "Johar machet") or Ol Chiki script manually.'
   };
 };
 
@@ -106,6 +106,16 @@ export class ClassroomSpeechRecognizer {
 
     // Stop any active recognition session before starting a new one
     this.stop();
+
+    // Safety guard for Santhali:
+    // Browser engines (Google Speech on Chrome/Android) do NOT bundle an acoustic model for 'sat'.
+    // Starting with 'sat' causes browsers to fall back to English/Hindi and output distorted guesses.
+    // Strictly block starting recognition for 'sat' to prevent distorted text from overwriting input.
+    if (lang === 'sat' || lang.startsWith('sat-')) {
+      const unsupportedMsg = '⚠️ Browser Limitation: Android Chrome and standard browsers do not currently support Santhali speech recognition (language code "sat") because speech engines lack an acoustic model for Santhali. Microphone recognition is paused to prevent incorrect English or Hindi words from overwriting your text. Please select from the verified classroom quick prompts below or type Romanized Santhali (e.g. "Johar machet") or Ol Chiki script manually.';
+      onError(unsupportedMsg);
+      return false;
+    }
 
     try {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;

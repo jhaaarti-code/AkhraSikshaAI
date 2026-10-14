@@ -8,7 +8,15 @@ import {
   translateHindiToTribal, 
   translateSanthaliToHindi 
 } from '../services/translatorService';
-import { speakText, stopSpeech } from '../services/speechService';
+import { 
+  speakText, 
+  stopSpeech, 
+  findBestVoice, 
+  onVoicesLoaded, 
+  checkSanthaliVoiceSupport,
+  getAvailableVoices
+} from '../services/speechService';
+import { generateOlChikiPronunciationApproximation } from '../utils/olChikiTransliterator';
 import { 
   speechRecognizer, 
   isSpeechRecognitionSupported,
@@ -26,7 +34,8 @@ export default function TranslatorSection({ onOpenApiGuide }) {
   const [isTeacherLoading, setIsTeacherLoading] = useState(false);
   const [isTeacherListening, setIsTeacherListening] = useState(false);
   const [teacherError, setTeacherError] = useState('');
-  const [isTeacherSpeaking, setIsTeacherSpeaking] = useState(false);
+  const [isTeacherHindiSpeaking, setIsTeacherHindiSpeaking] = useState(false);
+  const [isTeacherSanthaliSpeaking, setIsTeacherSanthaliSpeaking] = useState(false);
 
   // Student State (Santhali -> Hindi)
   const [studentSanthaliText, setStudentSanthaliText] = useState('Johar machet');
@@ -42,14 +51,42 @@ export default function TranslatorSection({ onOpenApiGuide }) {
   const [copiedKey, setCopiedKey] = useState('');
   const [speechNotice, setSpeechNotice] = useState('');
 
-  // Initial translation on component mount
+  // Santhali Voice Support State (monitored asynchronously for Android Chrome)
+  const [santhaliVoiceStatus, setSanthaliVoiceStatus] = useState({
+    isNativeSupported: false,
+    voiceLabel: '',
+    checked: false
+  });
+
+  // Diagnostic state to trace fallback playback lifecycle on Android Chrome
+  const [audioDiagnostics, setAudioDiagnostics] = useState(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+
+  // Initial translation & voice detection on component mount
   useEffect(() => {
     handleTranslateTeacher(teacherHindiText);
     handleTranslateStudent(studentSanthaliText);
 
+    // Detect voices immediately and listen for asynchronous loading (vital on Android Chrome)
+    const updateVoiceDetection = () => {
+      const support = checkSanthaliVoiceSupport();
+      const best = findBestVoice('sat');
+      setSanthaliVoiceStatus({
+        isNativeSupported: support.isNativeSupported,
+        voiceLabel: best?.label || '',
+        checked: true
+      });
+    };
+
+    updateVoiceDetection();
+    const unsubscribeVoices = onVoicesLoaded(() => {
+      updateVoiceDetection();
+    });
+
     return () => {
       speechRecognizer.stop();
       stopSpeech();
+      unsubscribeVoices();
     };
   }, []);
 
@@ -69,7 +106,8 @@ export default function TranslatorSection({ onOpenApiGuide }) {
 
     setIsTeacherLoading(true);
     stopSpeech();
-    setIsTeacherSpeaking(false);
+    setIsTeacherHindiSpeaking(false);
+    setIsTeacherSanthaliSpeaking(false);
 
     try {
       const res = await translateHindiToTribal({
@@ -88,7 +126,8 @@ export default function TranslatorSection({ onOpenApiGuide }) {
   const startTeacherListening = () => {
     setTeacherError('');
     stopSpeech();
-    setIsTeacherSpeaking(false);
+    setIsTeacherHindiSpeaking(false);
+    setIsTeacherSanthaliSpeaking(false);
 
     if (!isSpeechRecognitionSupported()) {
       setTeacherError('⚠️ आपके ब्राउज़र में माइक्रोफ़ोन स्पीच रिकग्निशन समर्थित नहीं है। कृपया Google Chrome का उपयोग करें या नीचे दिए गए त्वरित वाक्य चुनें।');
@@ -132,78 +171,160 @@ export default function TranslatorSection({ onOpenApiGuide }) {
 
   // Play Teacher's Hindi Input Text Aloud (Feature 2)
   const handleSpeakTeacherHindi = () => {
-    if (isTeacherSpeaking) {
-      stopSpeech();
-      setIsTeacherSpeaking(false);
-      return;
-    }
-
-    const trimmed = (teacherHindiText || '').trim();
-    if (!trimmed) {
-      setTeacherError('⚠️ कोई हिंदी वाक्य नहीं है जो बोला जा सके। पहले वाक्य टाइप करें या माइक से बोलें (No Hindi text to speak. Type or speak a sentence first).');
-      return;
-    }
-
-    setSpeechNotice('');
-    stopSpeech(); // Stop any existing playback
-
-    const res = speakText({
-      text: trimmed,
-      langCode: 'hi',
-      onStart: () => setIsTeacherSpeaking(true),
-      onEnd: () => setIsTeacherSpeaking(false),
-      onError: () => {
-        setIsTeacherSpeaking(false);
-        setSpeechNotice('⚠️ हिंदी टेक्स्ट-टू-स्पीच इंजन अनुपलब्ध है (Hindi TTS voice unavailable in this browser).');
+    try {
+      if (isTeacherHindiSpeaking) {
+        stopSpeech();
+        setIsTeacherHindiSpeaking(false);
+        setSpeechNotice('');
+        return;
       }
-    });
 
-    if (res?.voiceInfo && !res.voiceInfo.isNative) {
-      setSpeechNotice(`📢 ध्वनि सूचना: ${res.voiceInfo.label} — Hindi voice not natively available, using system fallback.`);
+      // If Santhali audio is currently playing, stop it first
+      if (isTeacherSanthaliSpeaking) {
+        stopSpeech();
+        setIsTeacherSanthaliSpeaking(false);
+      }
+
+      const trimmed = (teacherHindiText || '').trim();
+      if (!trimmed) {
+        setTeacherError('⚠️ कोई हिंदी वाक्य नहीं है जो बोला जा सके। पहले वाक्य टाइप करें या माइक से बोलें (No Hindi text to speak. Type or speak a sentence first).');
+        return;
+      }
+
+      setSpeechNotice(''); // Clear any previous error
+
+      const res = speakText({
+        text: trimmed,
+        langCode: 'hi',
+        onStart: (voiceInfo) => {
+          setIsTeacherHindiSpeaking(true);
+          setIsTeacherSanthaliSpeaking(false);
+          const voiceLabel = voiceInfo?.label || 'Hindi Voice';
+          setSpeechNotice(`🔊 Playing Hindi audio using ${voiceLabel}.`);
+        },
+        onEnd: () => {
+          setIsTeacherHindiSpeaking(false);
+          setSpeechNotice('');
+        },
+        onError: (err) => {
+          setIsTeacherHindiSpeaking(false);
+          setSpeechNotice(`⚠️ Hindi audio playback failed: ${err?.message || 'TTS engine unavailable in this browser.'}`);
+        }
+      });
+
+      if (res?.error) {
+        setSpeechNotice(`⚠️ Hindi audio error: ${res.error}`);
+      }
+    } catch (err) {
+      console.error('handleSpeakTeacherHindi error:', err);
+      setIsTeacherHindiSpeaking(false);
+      setSpeechNotice(`⚠️ Hindi audio handler error: ${err?.message || 'Unexpected error'}`);
     }
   };
 
   const handleSpeakSanthali = () => {
-    if (isTeacherSpeaking) {
-      stopSpeech();
-      setIsTeacherSpeaking(false);
-      return;
-    }
-
-    if (!teacherTranslation) {
-      setSpeechNotice('⚠️ कोई अनुवाद उपलब्ध नहीं है। पहले एक वाक्य का अनुवाद करें (No translation available to speak).');
-      return;
-    }
-
-    // Check if there's actual Santhali text to speak
-    const santhaliText = teacherTranslation.santhaliRoman || teacherTranslation.santhaliDevanagari;
-    if (!santhaliText) {
-      setSpeechNotice('⚠️ इस वाक्य का सत्यापित संथाली अनुवाद उपलब्ध नहीं है (No verified Santhali translation to speak).');
-      return;
-    }
-
-    setSpeechNotice('');
-    stopSpeech(); // Stop any existing playback before starting new one
-
-    const res = speakText({
-      text: santhaliText,
-      langCode: selectedLanguage,
-      romanPhonetic: teacherTranslation.santhaliRoman || '',
-      devanagariPhonetic: teacherTranslation.santhaliDevanagari || '',
-      onStart: () => setIsTeacherSpeaking(true),
-      onEnd: () => setIsTeacherSpeaking(false),
-      onError: () => {
-        setIsTeacherSpeaking(false);
-        setSpeechNotice('⚠️ Santhali audio playback failed. No native Santhali TTS voice is available in this browser.');
+    try {
+      if (isTeacherSanthaliSpeaking) {
+        stopSpeech();
+        setIsTeacherSanthaliSpeaking(false);
+        setSpeechNotice('');
+        setAudioDiagnostics((prev) => prev ? { ...prev, status: 'Playback stopped by user' } : null);
+        return;
       }
-    });
 
-    if (res?.voiceInfo) {
-      if (!res.voiceInfo.isNative) {
-        setSpeechNotice(`📢 ⚠️ Native Santhali TTS voice is NOT available. Playing pronunciation guide using "${res.voiceInfo.label}" as approximation. This is NOT verified Santhali audio — it reads the Roman/Devanagari phonetic guide aloud.`);
-      } else {
-        setSpeechNotice(`📢 Playing Santhali audio using ${res.voiceInfo.label}.`);
+      // If Hindi audio is currently playing, stop it first
+      if (isTeacherHindiSpeaking) {
+        stopSpeech();
+        setIsTeacherHindiSpeaking(false);
       }
+
+      if (!teacherTranslation) {
+        setSpeechNotice('⚠️ कोई अनुवाद उपलब्ध नहीं है। पहले एक वाक्य का अनुवाद करें (No translation available to speak).');
+        return;
+      }
+
+      // Determine the Roman pronunciation guide (browser TTS engines cannot read Ol Chiki script)
+      let romanGuide = teacherTranslation.santhaliRoman || '';
+      if (!romanGuide && teacherTranslation.santhaliOlChiki) {
+        // Auto-generate Roman approximation if not already in translation object
+        const approx = generateOlChikiPronunciationApproximation(teacherTranslation.santhaliOlChiki);
+        romanGuide = approx?.romanApproximation || '';
+      }
+
+      if (!romanGuide && !teacherTranslation.santhaliDevanagari) {
+        setSpeechNotice('⚠️ इस वाक्य का रोमन उच्चारण गाइड उपलब्ध नहीं है (No Roman pronunciation guide available).');
+        return;
+      }
+
+      setSpeechNotice(''); // Clear any previous error
+
+      const textCandidate = romanGuide || teacherTranslation.santhaliDevanagari;
+      const initialVoices = getAvailableVoices();
+      setAudioDiagnostics({
+        status: 'Queued to speak (waiting for onstart)...',
+        time: new Date().toLocaleTimeString(),
+        text: textCandidate,
+        totalVoices: initialVoices.length
+      });
+
+      const res = speakText({
+        text: textCandidate,
+        langCode: selectedLanguage, // 'sat'
+        romanPhonetic: romanGuide,
+        devanagariPhonetic: teacherTranslation.santhaliDevanagari || '',
+        onStart: (voiceInfo) => {
+          setIsTeacherSanthaliSpeaking(true);
+          setIsTeacherHindiSpeaking(false);
+          const voiceLabel = voiceInfo?.label || 'available browser voice';
+          setSpeechNotice(`📢 Playing approximate pronunciation guide using ${voiceLabel} (Not authentic Santhali voice).`);
+          setAudioDiagnostics({
+            status: 'onstart fired (synthesis started)',
+            time: new Date().toLocaleTimeString(),
+            voiceLabel: voiceInfo?.label,
+            voiceLang: voiceInfo?.lang,
+            script: voiceInfo?.script,
+            fallbackType: voiceInfo?.fallbackType,
+            text: voiceInfo?.spokenText,
+            totalVoices: voiceInfo?.totalVoices
+          });
+        },
+        onEnd: (info) => {
+          setIsTeacherSanthaliSpeaking(false);
+          setSpeechNotice('');
+          setAudioDiagnostics((prev) => prev ? {
+            ...prev,
+            status: `onend fired (finished in ${info?.durationMs ?? 0}ms)`,
+            time: new Date().toLocaleTimeString()
+          } : null);
+        },
+        onError: (err) => {
+          setIsTeacherSanthaliSpeaking(false);
+          setSpeechNotice(`⚠️ Santhali audio playback notice: ${err?.message || err?.error || 'Speech synthesis failed on this device.'}`);
+          setAudioDiagnostics((prev) => prev ? {
+            ...prev,
+            status: `onerror fired: ${err?.message || err?.error || 'Speech synthesis error'}`,
+            time: new Date().toLocaleTimeString()
+          } : null);
+        }
+      });
+
+      if (res?.error) {
+        setSpeechNotice(`⚠️ Santhali audio error: ${res.error}`);
+        setAudioDiagnostics((prev) => ({
+          ...(prev || {}),
+          status: `speakText error: ${res.error}`,
+          time: new Date().toLocaleTimeString()
+        }));
+      }
+    } catch (err) {
+      console.error('handleSpeakSanthali error:', err);
+      setIsTeacherSanthaliSpeaking(false);
+      setSpeechNotice(`⚠️ Santhali audio handler error: ${err?.message || 'Unexpected error'}`);
+      setAudioDiagnostics((prev) => ({
+        ...(prev || {}),
+        status: `Handler exception: ${err?.message || 'Error'}`,
+        time: new Date().toLocaleTimeString()
+      }));
     }
   };
 
@@ -245,21 +366,24 @@ export default function TranslatorSection({ onOpenApiGuide }) {
     setIsStudentSpeaking(false);
 
     if (!isSpeechRecognitionSupported()) {
-      setStudentError('⚠️ आपके ब्राउज़र में माइक्रोफ़ोन स्पीच रिकग्निशन समर्थित नहीं है (Speech recognition is not supported in this browser). कृपया नीचे दिए गए बॉक्स में संथाली वाक्य मैन्युअल रूप से टाइप करें।');
+      setStudentError('⚠️ आपके ब्राउज़र में माइक्रोफ़ोन स्पीच रिकग्निशन समर्थित नहीं है (Speech recognition is not supported in this browser). कृपया नीचे दिए गए बॉक्स में संथाली वाक्य टाइप करें।');
       return;
     }
 
-    // 1. Explicitly request microphone permission
+    // 1. Check whether the current browser natively supports Santhali ('sat') speech recognition
+    const supportCheck = await checkSanthaliSpeechSupport();
+    if (!supportCheck.satSupported) {
+      // Clearly inform the user and do NOT let the browser's English model capture distorted text
+      setSanthaliSpeechStatus(supportCheck.message);
+      setIsStudentListening(false);
+      return;
+    }
+
+    // 2. Explicitly request microphone permission (only reached if native sat recognition is supported)
     const permResult = await requestMicrophonePermission();
     if (!permResult.granted) {
       setStudentError(permResult.error);
       return;
-    }
-
-    // 2. Check whether the current browser natively supports Santhali ('sat') speech recognition
-    const supportCheck = await checkSanthaliSpeechSupport();
-    if (!supportCheck.satSupported) {
-      setSanthaliSpeechStatus(supportCheck.message);
     }
 
     // 3. Attempt speech recognition using the Santhali language code 'sat'
@@ -268,7 +392,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
       lang: 'sat',
       onStart: () => {
         setIsStudentListening(true);
-        setSpeechNotice('🎤 Attempting Santhali speech recognition with language code "sat"...');
+        setSpeechNotice('🎤 Santhali speech recognition active (code: "sat")...');
       },
       onResult: ({ rawText, finalTranscript, isFinal }) => {
         const textToUse = finalTranscript || rawText;
@@ -284,12 +408,9 @@ export default function TranslatorSection({ onOpenApiGuide }) {
         setSpeechNotice('');
         setStudentError(errMsg);
       },
-      onEnd: ({ hasReceivedResult } = {}) => {
+      onEnd: () => {
         setIsStudentListening(false);
         setSpeechNotice('');
-        if (!hasReceivedResult && !supportCheck.satSupported) {
-          setStudentError('⚠️ संथाली स्पीच रिकग्निशन (भाषा कोड: "sat") इस ब्राउज़र द्वारा समर्थित नहीं है (Santhali speech recognition with code "sat" is not supported by your current browser). कृपया नीचे दिए गए संथाली इनपुट बॉक्स में मैन्युअल रूप से टाइप करें या त्वरित संथाली वाक्य चुनें।');
-        }
       }
     });
 
@@ -308,22 +429,38 @@ export default function TranslatorSection({ onOpenApiGuide }) {
     if (isStudentSpeaking) {
       stopSpeech();
       setIsStudentSpeaking(false);
+      setSpeechNotice('');
       return;
     }
 
-    if (!studentTranslation) return;
+    if (!studentTranslation?.hindiTranslation) {
+      setStudentError('⚠️ कोई हिंदी अनुवाद उपलब्ध नहीं है जिसे बोला जा सके (No Hindi translation available to speak).');
+      return;
+    }
+
     setSpeechNotice('');
 
-    speakText({
+    const res = speakText({
       text: studentTranslation.hindiTranslation,
       langCode: 'hi',
-      onStart: () => setIsStudentSpeaking(true),
-      onEnd: () => setIsStudentSpeaking(false),
-      onError: () => {
+      onStart: (voiceInfo) => {
+        setIsStudentSpeaking(true);
+        const voiceLabel = voiceInfo?.label || 'Hindi Voice';
+        setSpeechNotice(`🔊 Playing translated Hindi audio using ${voiceLabel}.`);
+      },
+      onEnd: () => {
         setIsStudentSpeaking(false);
-        setSpeechNotice('⚠️ हिंदी स्पीच इंजन अनुपलब्ध है (Hindi speech engine unavailable).');
+        setSpeechNotice('');
+      },
+      onError: (err) => {
+        setIsStudentSpeaking(false);
+        setSpeechNotice(`⚠️ Hindi speech engine error: ${err?.message || 'Hindi TTS unavailable.'}`);
       }
     });
+
+    if (res?.error) {
+      setSpeechNotice(`⚠️ Hindi speech error: ${res.error}`);
+    }
   };
 
   const handleCopy = (content, key) => {
@@ -483,12 +620,12 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                   <div className="textarea-actions-group">
                     <button
                       type="button"
-                      className={`btn-audio-small hindi-audio-btn ${isTeacherSpeaking ? 'audio-active' : ''}`}
+                      className={`btn-audio-small hindi-audio-btn ${isTeacherHindiSpeaking ? 'audio-active' : ''}`}
                       onClick={handleSpeakTeacherHindi}
                       title="Play Hindi text aloud"
                     >
-                      <span className="audio-icon">{isTeacherSpeaking ? '⏹' : '🔊'}</span>
-                      <span>{isTeacherSpeaking ? 'Stop' : 'Play Hindi Audio'}</span>
+                      <span className="audio-icon">{isTeacherHindiSpeaking ? '⏹' : '🔊'}</span>
+                      <span>{isTeacherHindiSpeaking ? 'Stop' : 'Play Hindi Audio'}</span>
                     </button>
                     <button
                       type="button"
@@ -500,6 +637,14 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                     </button>
                   </div>
                 </div>
+
+                {/* Hindi Speech Feedback Banner (Mobile-Friendly) */}
+                {speechNotice && (isTeacherHindiSpeaking || speechNotice.includes('Hindi')) && (
+                  <div className="speech-inline-feedback animate-fade-in" role="status" style={{ marginTop: '0.6rem' }}>
+                    <span>{speechNotice}</span>
+                    <button type="button" className="btn-alert-dismiss" onClick={() => setSpeechNotice('')}>✕</button>
+                  </div>
+                )}
               </div>
 
               {/* One-Click Sample Prompts */}
@@ -542,19 +687,75 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                   <span>Santhali Classroom Translation (संथाली अनुवाद):</span>
                 </div>
 
-                {teacherTranslation && (teacherTranslation.isVerified || (teacherTranslation.isMachineTranslated && (teacherTranslation.santhaliRoman || teacherTranslation.santhaliDevanagari))) && (
+                {teacherTranslation && (teacherTranslation.isVerified || (teacherTranslation.isMachineTranslated && (teacherTranslation.santhaliRoman || teacherTranslation.santhaliDevanagari || teacherTranslation.santhaliOlChiki))) && (
                   <button
                     type="button"
-                    className={`btn-audio-playback ${isTeacherSpeaking ? 'audio-active' : ''}`}
+                    className={`btn-audio-playback santhali-audio-btn ${isTeacherSanthaliSpeaking ? 'audio-active' : ''}`}
                     onClick={handleSpeakSanthali}
-                    aria-label="Play Santhali pronunciation guide"
-                    title="Plays pronunciation guide using available TTS voice (may not be native Santhali)"
+                    aria-label={santhaliVoiceStatus.isNativeSupported ? 'Play Native Santhali Audio' : 'Play Roman Pronunciation Guide (Approximation)'}
+                    title={santhaliVoiceStatus.isNativeSupported ? 'Play native Santhali voice audio' : 'Play approximate pronunciation of Roman guide using fallback browser voice'}
                   >
-                    <span className="audio-icon">{isTeacherSpeaking ? '⏹' : '🔊'}</span>
-                    <span>{isTeacherSpeaking ? 'Stop Audio' : 'Play Pronunciation Guide'}</span>
+                    <span className="audio-icon">{isTeacherSanthaliSpeaking ? '⏹' : '🔊'}</span>
+                    <span>
+                      {isTeacherSanthaliSpeaking
+                        ? 'Stop Audio'
+                        : santhaliVoiceStatus.isNativeSupported
+                        ? 'Play Santhali Audio'
+                        : 'Play Roman Guide (Approx Audio)'}
+                    </span>
                   </button>
                 )}
               </div>
+
+              {/* Santhali Audio Notice (Single Unified Clean Banner) */}
+              {teacherTranslation && (teacherTranslation.isVerified || teacherTranslation.isMachineTranslated) && !santhaliVoiceStatus.isNativeSupported && (
+                <div className="santhali-tts-limitation-banner animate-fade-in" role="note">
+                  <span className="limitation-icon">ℹ️</span>
+                  <div className="limitation-text">
+                    <strong>Audio Notice:</strong> Native Santhali (<code>sat</code>) speech synthesis is unavailable on Android and desktop browsers. 
+                    The button above plays an <em>approximate pronunciation</em> of the Roman guide using an available browser voice ({santhaliVoiceStatus.voiceLabel || 'Indian English'}), NOT authentic Santhali speech.
+                    {isTeacherSanthaliSpeaking && (
+                      <span className="playing-indicator-text">
+                        🔊 <em>Now playing approximate pronunciation...</em>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Temporary Audio Diagnostics Panel for Mobile Testing */}
+              {teacherTranslation && (
+                <div className="audio-diagnostics-box" style={{ marginTop: '0.5rem', marginBottom: '0.6rem', fontSize: '0.8rem', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.45rem 0.7rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setShowDiagnostics(!showDiagnostics)}>
+                    <span style={{ fontWeight: 600, color: '#334155' }}>
+                      🔍 Audio Diagnostics: <span style={{ color: audioDiagnostics?.status?.includes('error') ? '#dc2626' : audioDiagnostics?.status?.includes('onstart') ? '#16a34a' : '#2563eb' }}>{audioDiagnostics?.status || 'Ready (tap audio button to trace)'}</span>
+                    </span>
+                    <button type="button" style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.75rem', cursor: 'pointer' }}>
+                      {showDiagnostics ? '▲ Hide' : '▼ Details'}
+                    </button>
+                  </div>
+                  {showDiagnostics && (
+                    <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px dashed #cbd5e1', fontFamily: 'monospace', fontSize: '0.75rem', color: '#334155', lineHeight: 1.5 }}>
+                      <div><strong>Status:</strong> {audioDiagnostics?.status || 'Idle'}</div>
+                      <div><strong>Selected Voice:</strong> {audioDiagnostics?.voiceLabel || santhaliVoiceStatus.voiceLabel || 'None'}</div>
+                      <div><strong>Voice Language:</strong> {audioDiagnostics?.voiceLang || 'N/A'}</div>
+                      <div><strong>Script Mode:</strong> {audioDiagnostics?.script || 'roman'}</div>
+                      <div><strong>Fallback Type:</strong> {audioDiagnostics?.fallbackType || 'N/A'}</div>
+                      <div><strong>Total Detected Voices:</strong> {audioDiagnostics?.totalVoices ?? getAvailableVoices().length}</div>
+                      <div><strong>Spoken Text:</strong> "{audioDiagnostics?.text || 'N/A'}"</div>
+                      <div><strong>Timestamp:</strong> {audioDiagnostics?.time || 'N/A'}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Inline Speech Notice (Only for Errors) */}
+              {speechNotice && speechNotice.startsWith('⚠️') && (
+                <div className="speech-inline-feedback animate-fade-in" role="alert">
+                  <span>{speechNotice}</span>
+                  <button type="button" className="btn-alert-dismiss" onClick={() => setSpeechNotice('')}>✕</button>
+                </div>
+              )}
 
               {isTeacherLoading ? (
                 <div className="loading-card">
@@ -843,6 +1044,14 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                           </button>
                         )}
                       </div>
+
+                      {/* Student Hindi Audio Speech Feedback */}
+                      {speechNotice && (isStudentSpeaking || speechNotice.includes('translated Hindi')) && (
+                        <div className="speech-inline-feedback animate-fade-in" role="status" style={{ marginBottom: '0.6rem' }}>
+                          <span>{speechNotice}</span>
+                          <button type="button" className="btn-alert-dismiss" onClick={() => setSpeechNotice('')}>✕</button>
+                        </div>
+                      )}
 
                       {studentTranslation.isVerified ? (
                         <div className="translation-display-card student-result-card animate-fade-in">

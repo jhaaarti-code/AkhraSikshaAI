@@ -155,10 +155,16 @@
 }
 
 .hero-container {
-  background: linear-gradient(135deg, #FFFDF9 0%, #FAF3EB 100%);
+  background-color: #FAF3EB;
+  background-image: 
+    linear-gradient(135deg, rgba(255, 253, 249, 0.92) 0%, rgba(250, 243, 235, 0.87) 50%, rgba(246, 237, 224, 0.93) 100%),
+    url('/images/classroom-hero-bg.jpg');
+  background-size: cover;
+  background-position: center right;
+  background-repeat: no-repeat;
   border: 1px solid #EFE4D6;
   border-radius: var(--radius-xl);
-  padding: 2rem 2.2rem;
+  padding: 2.2rem 2.4rem;
   box-shadow: var(--shadow-md);
   position: relative;
   overflow: hidden;
@@ -228,11 +234,13 @@
 }
 
 .stat-card {
-  background: var(--bg-card);
-  border: 1px solid #EFE8DC;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(239, 232, 220, 0.95);
   border-radius: var(--radius-md);
   padding: 0.85rem 1rem;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 8px rgba(44, 39, 36, 0.05);
   display: flex;
   flex-direction: column;
 }
@@ -2181,6 +2189,10 @@
 
   .hero-container {
     padding: 1.5rem 1.25rem;
+    background-image: 
+      linear-gradient(135deg, rgba(255, 253, 249, 0.95) 0%, rgba(250, 243, 235, 0.92) 100%),
+      url('/images/classroom-hero-bg.jpg');
+    background-position: 70% center;
   }
 
   .hero-heading {
@@ -2810,6 +2822,69 @@
 
 .btn-audio-small .audio-icon {
   font-size: 0.9rem;
+}
+
+/* Santhali TTS Limitation Banner (Android & Browser Compatibility Notice) */
+.santhali-tts-limitation-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.8rem;
+  color: #1E40AF;
+  line-height: 1.45;
+  margin-bottom: 0.75rem;
+}
+
+.santhali-tts-limitation-banner .limitation-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.santhali-tts-limitation-banner .limitation-text code {
+  background: #DBEAFE;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: #1E3A8A;
+}
+
+.santhali-tts-limitation-banner .playing-indicator-text {
+  display: block;
+  margin-top: 0.35rem;
+  font-weight: 600;
+  color: #1D4ED8;
+}
+
+/* Inline Speech Feedback (Mobile Friendly) */
+.speech-inline-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: #FEF3C7;
+  border: 1px solid #FCD34D;
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.85rem;
+  font-size: 0.8rem;
+  color: #92400E;
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+.speech-inline-feedback .btn-alert-dismiss {
+  background: none;
+  border: none;
+  color: #92400E;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0 0.3rem;
+  flex-shrink: 0;
 }
 
 /* Translation Display Card */
