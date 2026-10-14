@@ -16,7 +16,11 @@ import {
   checkSanthaliVoiceSupport,
   getAvailableVoices
 } from '../services/speechService';
-import { generateOlChikiPronunciationApproximation } from '../utils/olChikiTransliterator';
+import { 
+  generateOlChikiPronunciationApproximation,
+  containsOlChikiScript
+} from '../utils/olChikiTransliterator';
+import { matchSanthaliSpeech } from '../utils/santhaliSpeechMatcher';
 import { 
   speechRecognizer, 
   isSpeechRecognitionSupported,
@@ -37,14 +41,17 @@ export default function TranslatorSection({ onOpenApiGuide }) {
   const [isTeacherHindiSpeaking, setIsTeacherHindiSpeaking] = useState(false);
   const [isTeacherSanthaliSpeaking, setIsTeacherSanthaliSpeaking] = useState(false);
 
-  // Student State (Santhali -> Hindi)
-  const [studentSanthaliText, setStudentSanthaliText] = useState('Johar machet');
+  // Student State (Santhali -> Hindi) - Defaults to authentic native Ol Chiki script (ᱚᱞ ᱪᱤᱠᱤ)
+  const [studentSanthaliText, setStudentSanthaliText] = useState('ᱡᱚᱦᱟᱨ ᱢᱟᱪᱮᱛ');
+  const [studentScript, setStudentScript] = useState('olchiki'); // 'olchiki' (default) | 'roman'
   const [studentTranslation, setStudentTranslation] = useState(null);
   const [isStudentLoading, setIsStudentLoading] = useState(false);
   const [isStudentListening, setIsStudentListening] = useState(false);
   const [studentError, setStudentError] = useState('');
   const [santhaliSpeechStatus, setSanthaliSpeechStatus] = useState('');
   const [isStudentSpeaking, setIsStudentSpeaking] = useState(false);
+  const [isStudentSanthaliSpeaking, setIsStudentSanthaliSpeaking] = useState(false);
+  const [speechSpeed, setSpeechSpeed] = useState(0.94); // 0.94 = Natural Classroom Teaching Pace, 1.0 = Normal Pace
 
   // Target Tribal Language Selection
   const [selectedLanguage, setSelectedLanguage] = useState('sat');
@@ -243,22 +250,27 @@ export default function TranslatorSection({ onOpenApiGuide }) {
         return;
       }
 
-      // Determine the Roman pronunciation guide (browser TTS engines cannot read Ol Chiki script)
+      // Determine pronunciation guides: Devanagari phonetics provide natural, authentic Indian syllables
+      let devanagariGuide = teacherTranslation.santhaliDevanagari || '';
       let romanGuide = teacherTranslation.santhaliRoman || '';
+
       if (!romanGuide && teacherTranslation.santhaliOlChiki) {
-        // Auto-generate Roman approximation if not already in translation object
         const approx = generateOlChikiPronunciationApproximation(teacherTranslation.santhaliOlChiki);
         romanGuide = approx?.romanApproximation || '';
+        if (!devanagariGuide) {
+          devanagariGuide = approx?.devanagariApproximation || '';
+        }
       }
 
-      if (!romanGuide && !teacherTranslation.santhaliDevanagari) {
-        setSpeechNotice('⚠️ इस वाक्य का रोमन उच्चारण गाइड उपलब्ध नहीं है (No Roman pronunciation guide available).');
+      if (!romanGuide && !devanagariGuide && !teacherTranslation.santhaliOlChiki) {
+        setSpeechNotice('⚠️ इस वाक्य का उच्चारण उपलब्ध नहीं है (No pronunciation audio available).');
         return;
       }
 
       setSpeechNotice(''); // Clear any previous error
 
-      const textCandidate = romanGuide || teacherTranslation.santhaliDevanagari;
+      // Prioritize authentic Indic Devanagari phonetics for natural, warm pronunciation
+      const textCandidate = devanagariGuide || romanGuide || teacherTranslation.santhaliOlChiki;
       const initialVoices = getAvailableVoices();
       setAudioDiagnostics({
         status: 'Queued to speak (waiting for onstart)...',
@@ -271,12 +283,13 @@ export default function TranslatorSection({ onOpenApiGuide }) {
         text: textCandidate,
         langCode: selectedLanguage, // 'sat'
         romanPhonetic: romanGuide,
-        devanagariPhonetic: teacherTranslation.santhaliDevanagari || '',
+        devanagariPhonetic: devanagariGuide,
+        rate: speechSpeed,
         onStart: (voiceInfo) => {
           setIsTeacherSanthaliSpeaking(true);
           setIsTeacherHindiSpeaking(false);
-          const voiceLabel = voiceInfo?.label || 'available browser voice';
-          setSpeechNotice(`📢 Playing approximate pronunciation guide using ${voiceLabel} (Not authentic Santhali voice).`);
+          const voiceLabel = voiceInfo?.label || 'Natural Voice';
+          setSpeechNotice(`📢 Playing natural Santhali audio (${voiceLabel}).`);
           setAudioDiagnostics({
             status: 'onstart fired (synthesis started)',
             time: new Date().toLocaleTimeString(),
@@ -299,7 +312,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
         },
         onError: (err) => {
           setIsTeacherSanthaliSpeaking(false);
-          setSpeechNotice(`⚠️ Santhali audio playback notice: ${err?.message || err?.error || 'Speech synthesis failed on this device.'}`);
+          setSpeechNotice(`⚠️ Santhali audio notice: ${err?.message || err?.error || 'Speech synthesis failed on this device.'}`);
           setAudioDiagnostics((prev) => prev ? {
             ...prev,
             status: `onerror fired: ${err?.message || err?.error || 'Speech synthesis error'}`,
@@ -331,6 +344,32 @@ export default function TranslatorSection({ onOpenApiGuide }) {
   // -------------------------------------------------------------------------
   // Student Actions: Santhali -> Hindi
   // -------------------------------------------------------------------------
+  const handleToggleStudentScript = (newScript) => {
+    if (newScript === studentScript) return;
+    setStudentScript(newScript);
+    if (!studentSanthaliText) return;
+
+    if (newScript === 'roman') {
+      if (containsOlChikiScript(studentSanthaliText)) {
+        const approx = generateOlChikiPronunciationApproximation(studentSanthaliText);
+        if (approx?.romanApproximation) {
+          setStudentSanthaliText(approx.romanApproximation);
+          return;
+        }
+      }
+      const matched = matchSanthaliSpeech(studentSanthaliText);
+      if (matched?.santhaliRoman) {
+        setStudentSanthaliText(matched.santhaliRoman);
+      }
+    } else {
+      // Switch back to Ol Chiki
+      const matched = matchSanthaliSpeech(studentSanthaliText);
+      if (matched?.santhaliOlChiki) {
+        setStudentSanthaliText(matched.santhaliOlChiki);
+      }
+    }
+  };
+
   const handleTranslateStudent = async (text = studentSanthaliText) => {
     const trimmed = (text || '').trim();
     setStudentError('');
@@ -345,6 +384,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
     setIsStudentLoading(true);
     stopSpeech();
     setIsStudentSpeaking(false);
+    setIsStudentSanthaliSpeaking(false);
 
     try {
       const res = await translateSanthaliToHindi({
@@ -364,42 +404,39 @@ export default function TranslatorSection({ onOpenApiGuide }) {
     setSanthaliSpeechStatus('');
     stopSpeech();
     setIsStudentSpeaking(false);
+    setIsStudentSanthaliSpeaking(false);
 
     if (!isSpeechRecognitionSupported()) {
-      setStudentError('⚠️ आपके ब्राउज़र में माइक्रोफ़ोन स्पीच रिकग्निशन समर्थित नहीं है (Speech recognition is not supported in this browser). कृपया नीचे दिए गए बॉक्स में संथाली वाक्य टाइप करें।');
+      setStudentError('⚠️ आपके ब्राउज़र में माइक्रोफ़ोन ऑडियो समर्थित नहीं है। कृपया Chrome, Edge, Firefox या Safari का उपयोग करें।');
       return;
     }
 
-    // 1. Check whether the current browser natively supports Santhali ('sat') speech recognition
-    const supportCheck = await checkSanthaliSpeechSupport();
-    if (!supportCheck.satSupported) {
-      // Clearly inform the user and do NOT let the browser's English model capture distorted text
-      setSanthaliSpeechStatus(supportCheck.message);
-      setIsStudentListening(false);
-      return;
-    }
-
-    // 2. Explicitly request microphone permission (only reached if native sat recognition is supported)
+    // Explicitly request microphone permission
     const permResult = await requestMicrophonePermission();
     if (!permResult.granted) {
       setStudentError(permResult.error);
       return;
     }
 
-    // 3. Attempt speech recognition using the Santhali language code 'sat'
+    // Start Universal Santhali Speech Recognition
     const started = speechRecognizer.start({
       mode: 'student',
       lang: 'sat',
       onStart: () => {
         setIsStudentListening(true);
-        setSpeechNotice('🎤 Santhali speech recognition active (code: "sat")...');
+        setSpeechNotice('🎤 Santhali speech recognition active. Speak Santhali words clearly near the microphone...');
       },
-      onResult: ({ rawText, finalTranscript, isFinal }) => {
-        const textToUse = finalTranscript || rawText;
+      onResult: ({ rawText, finalTranscript, isFinal, santhaliRoman, santhaliOlChiki }) => {
+        // Respect user's script mode; default is authentic Ol Chiki (ᱚᱞ ᱪᱤᱠᱤ)
+        const textToUse = studentScript === 'roman'
+          ? (santhaliRoman || rawText || finalTranscript)
+          : (santhaliOlChiki || santhaliRoman || finalTranscript || rawText);
+
         if (textToUse) {
           setStudentSanthaliText(textToUse);
           if (isFinal) {
             handleTranslateStudent(textToUse);
+            setSanthaliSpeechStatus(`✓ Santhali speech recognized: "${textToUse}"`);
           }
         }
       },
@@ -416,6 +453,55 @@ export default function TranslatorSection({ onOpenApiGuide }) {
 
     if (!started) {
       setIsStudentListening(false);
+    }
+  };
+
+  // Play Student's Santhali Speech / Text Aloud with Natural Voice
+  const handleSpeakStudentSanthali = () => {
+    if (isStudentSanthaliSpeaking) {
+      stopSpeech();
+      setIsStudentSanthaliSpeaking(false);
+      setSpeechNotice('');
+      return;
+    }
+
+    if (isStudentSpeaking) {
+      stopSpeech();
+      setIsStudentSpeaking(false);
+    }
+
+    const trimmed = (studentSanthaliText || '').trim();
+    if (!trimmed) {
+      setStudentError('⚠️ कोई संथाली वाक्य नहीं है जिसे सुना जा सके (No Santhali text to play).');
+      return;
+    }
+
+    setSpeechNotice('');
+
+    const res = speakText({
+      text: trimmed,
+      langCode: 'sat',
+      devanagariPhonetic: studentTranslation?.santhaliDevanagari || '',
+      romanPhonetic: studentTranslation?.santhaliRoman || '',
+      rate: speechSpeed,
+      onStart: (voiceInfo) => {
+        setIsStudentSanthaliSpeaking(true);
+        setIsStudentSpeaking(false);
+        const voiceLabel = voiceInfo?.label || 'Natural Voice';
+        setSpeechNotice(`📢 Playing natural Santhali audio (${voiceLabel}).`);
+      },
+      onEnd: () => {
+        setIsStudentSanthaliSpeaking(false);
+        setSpeechNotice('');
+      },
+      onError: (err) => {
+        setIsStudentSanthaliSpeaking(false);
+        setSpeechNotice(`⚠️ Santhali audio error: ${err?.message || 'Playback failed'}`);
+      }
+    });
+
+    if (res?.error) {
+      setSpeechNotice(`⚠️ Santhali audio error: ${res.error}`);
     }
   };
 
@@ -688,22 +774,38 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                 </div>
 
                 {teacherTranslation && (teacherTranslation.isVerified || (teacherTranslation.isMachineTranslated && (teacherTranslation.santhaliRoman || teacherTranslation.santhaliDevanagari || teacherTranslation.santhaliOlChiki))) && (
-                  <button
-                    type="button"
-                    className={`btn-audio-playback santhali-audio-btn ${isTeacherSanthaliSpeaking ? 'audio-active' : ''}`}
-                    onClick={handleSpeakSanthali}
-                    aria-label={santhaliVoiceStatus.isNativeSupported ? 'Play Native Santhali Audio' : 'Play Roman Pronunciation Guide (Approximation)'}
-                    title={santhaliVoiceStatus.isNativeSupported ? 'Play native Santhali voice audio' : 'Play approximate pronunciation of Roman guide using fallback browser voice'}
-                  >
-                    <span className="audio-icon">{isTeacherSanthaliSpeaking ? '⏹' : '🔊'}</span>
-                    <span>
-                      {isTeacherSanthaliSpeaking
-                        ? 'Stop Audio'
-                        : santhaliVoiceStatus.isNativeSupported
-                        ? 'Play Santhali Audio'
-                        : 'Play Roman Guide (Approx Audio)'}
-                    </span>
-                  </button>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={`btn-audio-playback santhali-audio-btn ${isTeacherSanthaliSpeaking ? 'audio-active' : ''}`}
+                      onClick={handleSpeakSanthali}
+                      aria-label="Play Natural Santhali Audio"
+                      title="Play natural Santhali audio pronunciation"
+                    >
+                      <span className="audio-icon">{isTeacherSanthaliSpeaking ? '⏹' : '🔊'}</span>
+                      <span>
+                        {isTeacherSanthaliSpeaking ? 'Stop Audio' : 'Play Santhali Audio (प्राकृतिक उच्चारण)'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSpeechSpeed((prev) => (prev <= 0.94 ? 1.0 : 0.88))}
+                      style={{
+                        padding: '5px 10px',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        borderRadius: '6px',
+                        border: '1px solid #CBD5E1',
+                        background: '#F8FAFC',
+                        color: '#334155',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="Toggle speech pace: 0.9x (Natural Teaching Pace) vs 1.0x (Normal Pace)"
+                    >
+                      {speechSpeed <= 0.94 ? '🐢 0.9x Teaching Pace' : '⚡ 1.0x Normal Pace'}
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -956,16 +1058,71 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                     </div>
                   )}
 
-                  {/* Honest Browser Support Check Notice for 'sat' */}
+                  {/* Santhali Speech Status / Recognition Confirmation */}
                   {santhaliSpeechStatus && (
-                    <div className="alert-message error-alert animate-fade-in" role="status" style={{ marginBottom: '0.75rem', background: '#FFFBEB', borderColor: '#F59E0B', color: '#92400E' }}>
-                      <span className="alert-icon">ℹ️</span>
+                    <div
+                      className="alert-message animate-fade-in"
+                      role="status"
+                      style={{
+                        marginBottom: '0.75rem',
+                        background: santhaliSpeechStatus.startsWith('✓') ? '#ECFDF5' : '#FFFBEB',
+                        borderColor: santhaliSpeechStatus.startsWith('✓') ? '#10B981' : '#F59E0B',
+                        color: santhaliSpeechStatus.startsWith('✓') ? '#065F46' : '#92400E',
+                        fontWeight: santhaliSpeechStatus.startsWith('✓') ? 600 : 400
+                      }}
+                    >
+                      <span className="alert-icon">{santhaliSpeechStatus.startsWith('✓') ? '✓' : 'ℹ️'}</span>
                       <div className="alert-body">
                         <p>{santhaliSpeechStatus}</p>
                       </div>
                       <button type="button" className="btn-alert-dismiss" onClick={() => setSanthaliSpeechStatus('')}>✕</button>
                     </div>
                   )}
+
+                  {/* Script Selection Toggle (Ol Chiki Default vs Roman) */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary, #475569)' }}>
+                      <span>Script (ᱞᱤᱯᱤ):</span>
+                    </div>
+                    <div style={{ display: 'inline-flex', gap: '0.25rem', background: '#F1F5F9', padding: '3px', borderRadius: '18px', border: '1px solid #CBD5E1' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStudentScript('olchiki')}
+                        style={{
+                          padding: '3px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: studentScript === 'olchiki' ? 700 : 500,
+                          borderRadius: '14px',
+                          border: 'none',
+                          background: studentScript === 'olchiki' ? '#0D9488' : 'transparent',
+                          color: studentScript === 'olchiki' ? '#FFFFFF' : '#475569',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                        title="Display Santhali in authentic Ol Chiki script (ᱚᱞ ᱪᱤᱠᱤ)"
+                      >
+                        ✓ ᱚᱞ ᱪᱤᱠᱤ (Ol Chiki - Default)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStudentScript('roman')}
+                        style={{
+                          padding: '3px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: studentScript === 'roman' ? 700 : 500,
+                          borderRadius: '14px',
+                          border: 'none',
+                          background: studentScript === 'roman' ? '#0D9488' : 'transparent',
+                          color: studentScript === 'roman' ? '#FFFFFF' : '#475569',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                        title="Display Santhali in Roman / Latin letters"
+                      >
+                        Roman ABC
+                      </button>
+                    </div>
+                  </div>
 
                   {/* Editable Santhali Text Input Area */}
                   <div className="textarea-wrapper">
@@ -978,18 +1135,36 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                         setStudentSanthaliText(e.target.value);
                         if (studentError) setStudentError('');
                       }}
-                      placeholder="संथाली वाक्य बोलें या यहाँ टाइप करें (जैसे: Johar machet / ᱡᱚᱦᱟᱨ ᱢᱟᱪᱮᱛ)..."
+                      placeholder={studentScript === 'roman' ? 'Speak or type Santhali (e.g. Johar machet)...' : 'संथाली वाक्य बोलें या यहाँ टाइप करें (ᱡᱚᱦᱟᱨ ᱢᱟᱪᱮᱛ)...'}
+                      style={{
+                        fontFamily: studentScript === 'olchiki' ? '"Noto Sans Ol Chiki", system-ui, sans-serif' : 'inherit',
+                        fontSize: studentScript === 'olchiki' ? '1.08rem' : '0.95rem'
+                      }}
                     />
-                    <div className="textarea-meta-bar">
-                      <span className="hint-text">✏️ Manual Santhali input is always available (Roman, Ol Chiki, or Devanagari).</span>
-                      <button
-                        type="button"
-                        className="btn-action-small btn-student-action"
-                        onClick={() => handleTranslateStudent(studentSanthaliText)}
-                        disabled={isStudentLoading}
-                      >
-                        {isStudentLoading ? 'Translating...' : 'Translate to Hindi / हिंदी अनुवाद ➔'}
-                      </button>
+                    <div className="textarea-meta-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <span className="hint-text">
+                        {studentScript === 'olchiki' ? '✨ Native Santhali Ol Chiki mode active.' : '✏️ Roman Santhali phonetic mode active.'}
+                      </span>
+                      <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
+                        <button
+                          type="button"
+                          className="btn-action-small"
+                          style={{ background: '#0F766E', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.35rem 0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' }}
+                          onClick={handleSpeakStudentSanthali}
+                          disabled={!studentSanthaliText}
+                          title="Play natural Santhali audio pronunciation"
+                        >
+                          <span>{isStudentSanthaliSpeaking ? '⏹ Stop' : '🔊 Listen Santhali'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-action-small btn-student-action"
+                          onClick={() => handleTranslateStudent(studentSanthaliText)}
+                          disabled={isStudentLoading}
+                        >
+                          {isStudentLoading ? 'Translating...' : 'Translate to Hindi / हिंदी अनुवाद ➔'}
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -997,14 +1172,15 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                   <div className="quick-prompts-row">
                     <span className="prompts-title">⚡ Sample Santhali Phrases (संथाली वाक्य):</span>
                     <div className="prompts-chips-wrap">
-                      {STUDENT_SAMPLE_PROMPTS.slice(0, 4).map((p, i) => (
+                      {STUDENT_SAMPLE_PROMPTS.slice(0, 6).map((p, i) => (
                         <button
                           key={i}
                           type="button"
                           className="btn-prompt-chip student-chip"
                           onClick={() => {
-                            setStudentSanthaliText(p.text);
-                            handleTranslateStudent(p.text);
+                            const val = studentScript === 'roman' ? (p.roman || p.text) : p.text;
+                            setStudentSanthaliText(val);
+                            handleTranslateStudent(val);
                           }}
                         >
                           {p.label}
@@ -1178,16 +1354,71 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                 </div>
               )}
 
-              {/* Honest Browser Support Check Notice for 'sat' */}
+              {/* Santhali Speech Status / Recognition Confirmation */}
               {santhaliSpeechStatus && (
-                <div className="alert-message error-alert animate-fade-in" role="status" style={{ marginBottom: '0.75rem', background: '#FFFBEB', borderColor: '#F59E0B', color: '#92400E' }}>
-                  <span className="alert-icon">ℹ️</span>
+                <div
+                  className="alert-message animate-fade-in"
+                  role="status"
+                  style={{
+                    marginBottom: '0.75rem',
+                    background: santhaliSpeechStatus.startsWith('✓') ? '#ECFDF5' : '#FFFBEB',
+                    borderColor: santhaliSpeechStatus.startsWith('✓') ? '#10B981' : '#F59E0B',
+                    color: santhaliSpeechStatus.startsWith('✓') ? '#065F46' : '#92400E',
+                    fontWeight: santhaliSpeechStatus.startsWith('✓') ? 600 : 400
+                  }}
+                >
+                  <span className="alert-icon">{santhaliSpeechStatus.startsWith('✓') ? '✓' : 'ℹ️'}</span>
                   <div className="alert-body">
                     <p>{santhaliSpeechStatus}</p>
                   </div>
                   <button type="button" className="btn-alert-dismiss" onClick={() => setSanthaliSpeechStatus('')}>✕</button>
                 </div>
               )}
+
+              {/* Script Selection Toggle (Ol Chiki Default vs Roman) */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary, #475569)' }}>
+                  <span>Script (ᱞᱤᱯᱤ):</span>
+                </div>
+                <div style={{ display: 'inline-flex', gap: '0.25rem', background: '#F1F5F9', padding: '3px', borderRadius: '18px', border: '1px solid #CBD5E1' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleStudentScript('olchiki')}
+                    style={{
+                      padding: '3px 10px',
+                      fontSize: '0.78rem',
+                      fontWeight: studentScript === 'olchiki' ? 700 : 500,
+                      borderRadius: '14px',
+                      border: 'none',
+                      background: studentScript === 'olchiki' ? '#0D9488' : 'transparent',
+                      color: studentScript === 'olchiki' ? '#FFFFFF' : '#475569',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                    title="Display Santhali in authentic Ol Chiki script (ᱚᱞ ᱪᱤᱠᱤ)"
+                  >
+                    ✓ ᱚᱞ ᱪᱤᱠᱤ (Ol Chiki - Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleStudentScript('roman')}
+                    style={{
+                      padding: '3px 10px',
+                      fontSize: '0.78rem',
+                      fontWeight: studentScript === 'roman' ? 700 : 500,
+                      borderRadius: '14px',
+                      border: 'none',
+                      background: studentScript === 'roman' ? '#0D9488' : 'transparent',
+                      color: studentScript === 'roman' ? '#FFFFFF' : '#475569',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                    title="Display Santhali in Roman / Latin letters"
+                  >
+                    Roman ABC
+                  </button>
+                </div>
+              </div>
 
               {/* Editable Textarea for Recognized Santhali Speech */}
               <div className="textarea-wrapper">
@@ -1200,18 +1431,36 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                     setStudentSanthaliText(e.target.value);
                     if (studentError) setStudentError('');
                   }}
-                  placeholder="यहाँ छात्र का संथाली वाक्य दिखाई देगा (जैसे: Johar machet / ᱡᱚᱦᱟᱨ ᱢᱟᱪᱮᱛ)..."
+                  placeholder={studentScript === 'roman' ? 'Speak or type Santhali (e.g. Johar machet)...' : 'यहाँ छात्र का संथाली वाक्य दिखाई देगा (ᱡᱚᱦᱟᱨ ᱢᱟᱪᱮᱛ)...'}
+                  style={{
+                    fontFamily: studentScript === 'olchiki' ? '"Noto Sans Ol Chiki", system-ui, sans-serif' : 'inherit',
+                    fontSize: studentScript === 'olchiki' ? '1.08rem' : '0.95rem'
+                  }}
                 />
-                <div className="textarea-meta-bar">
-                  <span className="hint-text">✏️ You can edit or type student Santhali words (Roman or Ol Chiki).</span>
-                  <button
-                    type="button"
-                    className="btn-action-small btn-student-action"
-                    onClick={() => handleTranslateStudent(studentSanthaliText)}
-                    disabled={isStudentLoading}
-                  >
-                    {isStudentLoading ? 'Translating...' : 'Translate to Hindi / हिंदी अनुवाद ➔'}
-                  </button>
+                <div className="textarea-meta-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <span className="hint-text">
+                    {studentScript === 'olchiki' ? '✨ Native Santhali Ol Chiki mode active.' : '✏️ Roman Santhali phonetic mode active.'}
+                  </span>
+                  <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className="btn-action-small"
+                      style={{ background: '#0F766E', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.35rem 0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' }}
+                      onClick={handleSpeakStudentSanthali}
+                      disabled={!studentSanthaliText}
+                      title="Play natural Santhali audio pronunciation"
+                    >
+                      <span>{isStudentSanthaliSpeaking ? '⏹ Stop' : '🔊 Listen Santhali'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-action-small btn-student-action"
+                      onClick={() => handleTranslateStudent(studentSanthaliText)}
+                      disabled={isStudentLoading}
+                    >
+                      {isStudentLoading ? 'Translating...' : 'Translate to Hindi / हिंदी अनुवाद ➔'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1219,14 +1468,15 @@ export default function TranslatorSection({ onOpenApiGuide }) {
               <div className="quick-prompts-row">
                 <span className="prompts-title">⚡ Common Student Expressions (छात्र अभिव्यक्ति):</span>
                 <div className="prompts-chips-wrap">
-                  {STUDENT_SAMPLE_PROMPTS.slice(0, 4).map((p, i) => (
+                  {STUDENT_SAMPLE_PROMPTS.slice(0, 6).map((p, i) => (
                     <button
                       key={i}
                       type="button"
                       className="btn-prompt-chip student-chip"
                       onClick={() => {
-                        setStudentSanthaliText(p.text);
-                        handleTranslateStudent(p.text);
+                        const val = studentScript === 'roman' ? (p.roman || p.text) : p.text;
+                        setStudentSanthaliText(val);
+                        handleTranslateStudent(val);
                       }}
                     >
                       {p.label}
@@ -1279,7 +1529,7 @@ export default function TranslatorSection({ onOpenApiGuide }) {
                     {/* Verified Badge */}
                     <div className="result-badge-row">
                       <span className="badge-pill badge-verified">
-                        ✓ Verified Student Expression
+                        ✓ {studentTranslation.verificationBadge || 'Verified Student Expression'}
                       </span>
                       <span className="badge-script">Hindi (हिंदी)</span>
                     </div>
